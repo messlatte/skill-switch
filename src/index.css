@@ -49,8 +49,7 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Apple-style tokens: quiet, airy, low-saturation. Light values live on :root,
-   dark values under .dark — main.tsx toggles the class from prefers-color-scheme. */
+/* Light theme on :root, dark theme under .dark (set by main.tsx). */
 :root {
     --background: #F5F5F7;
     --foreground: #1D1D1F;
@@ -134,7 +133,7 @@
     }
 }
 
-/* Frameless window: only the drag region reacts to the mouse for moving the window. */
+/* Frameless window: this region moves the window. */
 [data-tauri-drag-region] {
   -webkit-app-region: drag;
 }

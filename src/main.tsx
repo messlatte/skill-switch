@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
-// Follow the system theme; no provider needed for a one-way, non-interactive toggle.
+// Follow the system theme.
 const media = window.matchMedia('(prefers-color-scheme: dark)')
 const applyTheme = (dark: boolean) => document.documentElement.classList.toggle('dark', dark)
 applyTheme(media.matches)

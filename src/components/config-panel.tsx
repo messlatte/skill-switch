@@ -4,7 +4,7 @@ import type { AttributionUsage, EnvInfo } from "@/lib/api"
 type ConfigPanelProps = {
   env: EnvInfo | null
   loading: boolean
-  /** From the Usage tab's transcript analysis — null until loaded once. */
+  /** From the Usage tab; null until it has loaded once. */
   mcpUsage: AttributionUsage[] | null
   usageLoading: boolean
   onLoadUsage: () => void

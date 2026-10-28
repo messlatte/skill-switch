@@ -6,7 +6,7 @@ export type Skill = {
   description: string
   skillMdPath: string | null
   enabled: boolean
-  /** skillOverrides[name] === "user-invocable-only" — only meaningful while enabled. */
+  /** skillOverrides[name] === "user-invocable-only". Only meaningful while enabled. */
   manualOnly: boolean
   linked: boolean
   /** "owner/repo" from ~/.agents/.skill-lock.json, if this skill is tracked there. */
@@ -33,12 +33,12 @@ export type EnvInfo = {
 export type ProjectRoute = {
   path: string
   exists: boolean
-  /** env.ANTHROPIC_BASE_URL is present in that project's settings.local.json right now. */
+  /** env.ANTHROPIC_BASE_URL is set in the project's settings.local.json. */
   active: boolean
   baseUrl: string | null
   hasToken: boolean
   gitignoreOk: boolean
-  /** env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY is set — only meaningful while active. */
+  /** Gateway model discovery is on. Only meaningful while active. */
   gatewayDiscovery: boolean
   error: string | null
 }
@@ -123,7 +123,7 @@ export type PeriodStats = {
 
 export type Trend = { current: PeriodStats; previous: PeriodStats }
 
-/** A marker that a skill or MCP server was involved in a message — correlation, never a cost. */
+/** Skill or MCP server seen in a message. Correlation only, not cost. */
 export type AttributionUsage = { name: string; messages: number; sessions: number; lastDay: string | null }
 
 export type UsageReport = {
@@ -201,8 +201,7 @@ export async function readEnv(): Promise<EnvInfo> {
   return invoke<EnvInfo>("read_env")
 }
 
-// Tauri blocks in-webview navigation to external origins by default; opening a repo
-// link has to go through the shell plugin so it launches the OS's default browser.
+// Tauri blocks webview navigation to external sites, so links open via the shell plugin.
 export async function openExternal(url: string): Promise<void> {
   if (!isTauri) {
     window.open(url, "_blank", "noopener,noreferrer")
@@ -212,8 +211,7 @@ export async function openExternal(url: string): Promise<void> {
 }
 
 // --- OmniRoute -------------------------------------------------------------
-// CLI/terminal only — Claude Desktop reads its own global, app-wide gateway
-// config, not any settings.json, so per-project routing is out of reach there.
+// CLI only: Claude Desktop uses one global gateway config, not settings.json.
 
 export async function readOmniroute(): Promise<OmniState> {
   if (!isTauri) return mockOmniState
@@ -356,7 +354,7 @@ export async function listProfiles(): Promise<Profile[]> {
   return invoke<Profile[]>("list_profiles")
 }
 
-/** Inserts, or — same name, case-insensitive — overwrites in place. Returns the new list. */
+/** Adds the profile or overwrites one with the same name (case-insensitive). Returns the new list. */
 export async function saveProfile(name: string, skills: Record<string, string>): Promise<Profile[]> {
   if (!isTauri) {
     const trimmed = name.trim()
@@ -413,22 +411,20 @@ export async function listLiveSessions(): Promise<LiveSession[]> {
   return invoke<LiveSession[]>("list_live_sessions")
 }
 
-/** Metadata-only pass over every transcript in ~/.claude/projects. Slow-ish (reads
- *  hundreds of MB), so callers show a loading state and cache the result. */
+/** Reads metadata from all transcripts in ~/.claude/projects. Slow (hundreds of MB),
+ *  so callers cache the result. */
 export async function analyzeUsage(): Promise<UsageReport> {
   if (!isTauri) return mockUsage
   return invoke<UsageReport>("analyze_usage")
 }
 
-/** Sends one tiny real request through the configured route and reports which
- *  model answered — uses OmniRoute's own "auto" routing, so this confirms the
- *  proxy itself works, not necessarily what a specific Claude Code model resolves to. */
+/** Sends one small request through the configured route and reports which model answered. */
 export async function testOmnirouteConnection(): Promise<ConnectionTestResult> {
   if (!isTauri) return { model: "auto/best-fast → gpt-5.5 (Vorschau)", latencyMs: 420 }
   return invoke<ConnectionTestResult>("test_omniroute_connection")
 }
 
-// Dev-mock data so the UI can be previewed in a plain browser (no Tauri backend attached).
+// Mock data for previewing the UI in a normal browser.
 const mockSkills: Skill[] = [
   {
     name: "humanizer",

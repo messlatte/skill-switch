@@ -48,7 +48,7 @@ type SkillListProps = {
   onStateChange: (skill: Skill, next: SkillState) => void
   onGroupStateChange: (skills: Skill[], next: SkillState) => void
   onRefresh: () => void
-  /** From the Usage tab's transcript analysis — null until loaded once. */
+  /** From the Usage tab; null until it has loaded once. */
   usage: AttributionUsage[] | null
   usageLoading: boolean
   onLoadUsage: () => void

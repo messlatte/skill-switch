@@ -1,14 +1,6 @@
-//! OmniRoute tab backend: route individual, opt-in "throwaway" project folders
-//! through a local OmniRoute proxy (http://localhost:20128 by default) instead of
-//! Anthropic directly — CLI/terminal only (see module-level note in lib.rs / CLAUDE.md
-//! for why Claude Desktop is architecturally out of scope: Desktop's gateway config
-//! is global-per-app, not per-project, so it can never satisfy "never global").
-//!
-//! Two independent ways to route a session, sharing one config store:
-//! - Persistent: patches `<project>\.claude\settings.local.json`'s `env` object.
-//!   Applies to any session the user starts themselves in a terminal later.
-//! - One-off: `open_omniroute_terminal` spawns a new terminal with the two env vars
-//!   set only on that one process — nothing is written to disk at all.
+//! OmniRoute tab: route opt-in project folders through a local OmniRoute proxy.
+//! Either via the project's `.claude\settings.local.json` or a one-off terminal.
+//! CLI only: Claude Desktop's gateway config is global per app, not per project.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -28,21 +20,16 @@ use crate::{claude_dir, read_json_file};
 
 const DEFAULT_BASE_URL: &str = "http://localhost:20128/v1";
 const OMNI_CONFIG_FILE: &str = "omniroute.json";
-/// Tells Claude Code to query the gateway's own `/v1/models` at startup and
-/// populate the `/model` picker with whatever it finds, instead of requiring an
-/// exact provider-prefixed model string to be typed or hardcoded. See CLAUDE.md.
+/// Makes Claude Code fill the `/model` picker from the gateway's `/v1/models`.
 const GATEWAY_DISCOVERY_KEY: &str = "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY";
 const MAX_BACKUPS: usize = 3;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 
-/// Serializes read-modify-write access to omniroute.json and project settings.local.json
-/// files. Separate from lib.rs's SETTINGS_LOCK — different files, no reason to serialize
-/// skill-toggling and OmniRoute project-toggling against each other.
+/// Guards read-modify-write of omniroute.json and the projects' settings.local.json.
 static OMNI_LOCK: Mutex<()> = Mutex::new(());
 
-/// Tauri-managed handle to a `omniroute` process this app started, so "Stoppen" can
-/// find and kill it. `None` means either never started, or already stopped/exited.
+/// The `omniroute` process started by this app, if any.
 pub struct ProxyState(pub Mutex<Option<Child>>);
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -69,15 +56,13 @@ struct ProjectRoute {
     path: String,
     /// Folder still exists and is a directory.
     exists: bool,
-    /// env.ANTHROPIC_BASE_URL is present (and non-empty) in that project's
-    /// settings.local.json right now — read fresh from disk, not from client state.
+    /// Non-empty env.ANTHROPIC_BASE_URL in the project's settings.local.json, read from disk.
     active: bool,
     /// The base URL actually on disk, so the UI can flag drift from the configured one.
     base_url: Option<String>,
     has_token: bool,
     gitignore_ok: bool,
-    /// env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY is set — only meaningful
-    /// while `active`, since it needs a base URL to query.
+    /// Gateway model discovery is set. Only meaningful while `active`.
     gateway_discovery: bool,
     error: Option<String>,
 }
@@ -99,8 +84,8 @@ pub struct GlobalRouteWarning {
 }
 
 // ---------------------------------------------------------------------------
-// App-owned config (%LOCALAPPDATA%\<identifier>\omniroute.json) — Local, not
-// Roaming, so the API key doesn't sync to a domain profile server.
+// Config in %LOCALAPPDATA%\<identifier>\omniroute.json. Local rather than
+// Roaming so the API key doesn't sync to a domain profile server.
 // ---------------------------------------------------------------------------
 
 fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -115,8 +100,7 @@ fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
 fn read_config(app: &AppHandle) -> Result<OmniConfig, String> {
     let path = config_path(app)?;
     match fs::read_to_string(&path) {
-        // Corrupt file must error, never silently reset — that would drop the
-        // user's whole project list without telling them.
+        // Error out on a corrupt file instead of silently dropping the project list.
         Ok(s) => serde_json::from_str(&s)
             .map_err(|e| format!("omniroute.json ist kein gültiges JSON: {e}")),
         Err(_) => Ok(OmniConfig::default()),
@@ -131,9 +115,8 @@ fn write_config(app: &AppHandle, cfg: &OmniConfig) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
-// Path validation — the project folder is arbitrary (anywhere on disk), so
-// validate_skill_name's character blocklist doesn't apply (it would reject any
-// normal Windows absolute path). Validate structurally instead.
+// Path validation. Project folders can be anywhere, so validate_skill_name's
+// character blocklist doesn't fit; check the path structure instead.
 // ---------------------------------------------------------------------------
 
 fn validate_project_path(raw: &str) -> Result<PathBuf, String> {
@@ -145,8 +128,7 @@ fn validate_project_path(raw: &str) -> Result<PathBuf, String> {
     if !p.is_absolute() {
         return Err(format!("\"{trimmed}\" ist kein absoluter Pfad."));
     }
-    // Reject ".." *segments*, not a substring match — a folder legitimately named
-    // "my..folder" must not be rejected.
+    // Check for ".." segments, not substrings, so "my..folder" is still allowed.
     if p.components().any(|c| matches!(c, Component::ParentDir)) {
         return Err(format!("\"{trimmed}\" enthält \"..\" – nicht erlaubt."));
     }
@@ -158,7 +140,7 @@ fn validate_project_path(raw: &str) -> Result<PathBuf, String> {
     Ok(p)
 }
 
-/// Dedupe/lookup key only — never persisted or shown.
+/// Only used as a lookup key, never stored or shown.
 fn normalize_key(p: &Path) -> String {
     p.to_string_lossy()
         .trim_end_matches(['\\', '/'])
@@ -180,7 +162,7 @@ fn project_settings_path(project: &Path) -> PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// Pure JSON patch (unit-testable, no I/O) — same shape as apply_skill_override.
+// JSON patches (pure, no I/O)
 // ---------------------------------------------------------------------------
 
 fn apply_route(mut settings: Value, route: Option<(&str, &str)>) -> Result<Value, String> {
@@ -208,7 +190,7 @@ fn apply_route(mut settings: Value, route: Option<(&str, &str)>) -> Result<Value
         None => {
             env_obj.remove("ANTHROPIC_BASE_URL");
             env_obj.remove("ANTHROPIC_AUTH_TOKEN");
-            // Orphaned without a base URL to discover from — clean it up too.
+            // Discovery is useless without a base URL.
             env_obj.remove(GATEWAY_DISCOVERY_KEY);
         }
     }
@@ -241,13 +223,11 @@ fn apply_gateway_discovery(mut settings: Value, enabled: bool) -> Result<Value, 
 }
 
 // ---------------------------------------------------------------------------
-// Backups — centralized under the app's own data dir, never in the project
-// (no git noise, no unignored plaintext-key file sitting in the repo). Only
-// taken when a file already existed; capped at MAX_BACKUPS newest per project.
+// Backups go to the app data dir, not the project, so no copy of the key lands
+// in the repo. Only taken if the file existed; MAX_BACKUPS per project.
 // ---------------------------------------------------------------------------
 
-/// Per-project backup subfolder key (hash of the normalized project path, so a
-/// project path itself never becomes part of a filesystem path under app data).
+/// Hashed so the project path itself never shows up in a path under app data.
 fn project_backup_key(project: &Path) -> String {
     let mut hasher = DefaultHasher::new();
     normalize_key(project).hash(&mut hasher);
@@ -264,10 +244,8 @@ fn backup_dir(app: &AppHandle, subfolder: &str) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Best-effort: returns a warning message on failure, never blocks the caller.
-/// `subfolder` scopes backups (per-project hash for OmniRoute, a fixed name for
-/// hook.rs's shared settings.json); `file_label` is the backed-up file's own name,
-/// used as the backup filename prefix (e.g. "settings.local.json").
+/// Best-effort: returns a warning instead of failing the caller.
+/// `file_label` is the name of the backed-up file and prefixes the backup name.
 pub(crate) fn rotate_backup(app: &AppHandle, subfolder: &str, file_label: &str, content: &str) -> Option<String> {
     let dir = match backup_dir(app, subfolder) {
         Ok(d) => d,
@@ -295,7 +273,7 @@ pub(crate) fn rotate_backup(app: &AppHandle, subfolder: &str, file_label: &str, 
 }
 
 // ---------------------------------------------------------------------------
-// .gitignore — an offer, never a blocker for toggling the route on.
+// .gitignore check: only a hint, never blocks enabling the route.
 // ---------------------------------------------------------------------------
 
 fn check_gitignore(project: &Path) -> bool {
@@ -430,18 +408,15 @@ fn is_port_reachable(host: &str, port: u16) -> bool {
         .any(|a| TcpStream::connect_timeout(&a, Duration::from_millis(300)).is_ok())
 }
 
-/// `{base_url}/messages` — the Anthropic-shaped endpoint Claude Code itself calls.
-/// Joins on the base URL's existing path so both "http://host:port" and
-/// "http://host:port/v1" style base URLs end up at the right place.
+/// `{base_url}/messages`, the endpoint Claude Code calls. Keeps the base URL's
+/// path, so it works with and without a trailing `/v1`.
 fn messages_path(base_url: &str) -> Result<String, String> {
     let url = url::Url::parse(base_url).map_err(|e| format!("Ungültige Basis-URL: {e}"))?;
     Ok(format!("{}/messages", url.path().trim_end_matches('/')))
 }
 
-/// Minimal blocking HTTP/1.1 client for the connection-test request — OmniRoute is
-/// always local, plain HTTP (see CLAUDE.md: base URL empirically has no TLS), so a
-/// full HTTP client crate isn't worth adding for one diagnostic call. `Connection:
-/// close` lets us just read to EOF instead of parsing Content-Length/chunked framing.
+/// Minimal HTTP/1.1 POST for the connection test. OmniRoute runs locally without TLS,
+/// so no client crate; `Connection: close` lets us read to EOF instead of parsing framing.
 fn http_post_json(
     host: &str,
     port: u16,
@@ -558,9 +533,8 @@ pub fn remove_omniroute_project(app: AppHandle, path: String) -> Result<(), Stri
     write_config(&app, &cfg)
 }
 
-/// `Ok(None)` = clean success (or true no-op if nothing actually changed).
-/// `Ok(Some(warning))` = the route was written, but the backup and/or gitignore
-/// check has something the user should see. `Err` = nothing was written.
+/// `Ok(None)`: done or nothing to change. `Ok(Some(warning))`: route written, but the
+/// backup or .gitignore check has a warning. `Err`: nothing was written.
 #[tauri::command]
 pub fn set_project_route(app: AppHandle, path: String, active: bool) -> Result<Option<String>, String> {
     let project = validate_project_path(&path)?;
@@ -614,9 +588,7 @@ pub fn set_project_route(app: AppHandle, path: String, active: bool) -> Result<O
     Ok(warning)
 }
 
-/// Toggles `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`, independent of the main
-/// routing switch — but only meaningful once that's on, since discovery needs a
-/// base URL to query. Same read-patch-backup-write shape as `set_project_route`.
+/// Separate switch from the route itself, but only useful while the route is on.
 #[tauri::command]
 pub fn set_gateway_discovery(app: AppHandle, path: String, enabled: bool) -> Result<Option<String>, String> {
     let project = validate_project_path(&path)?;
@@ -679,12 +651,8 @@ pub struct ConnectionTestResult {
     latency_ms: u64,
 }
 
-/// Sends one tiny real request through the configured base URL + key and reports
-/// which model actually answered. Uses OmniRoute's own "auto" routing (its
-/// load-balancing/failover picks among whatever providers are currently active) —
-/// this tells you the proxy itself is reachable and working, not necessarily what
-/// a specific Claude Code model name would resolve to (Claude Code exposes neither
-/// the active base URL nor the real response model anywhere itself).
+/// Sends one small request through the configured base URL and key. Uses OmniRoute's
+/// "auto" model, so it proves the proxy works, not what a given Claude model maps to.
 #[tauri::command(async)]
 pub fn test_omniroute_connection(app: AppHandle) -> Result<ConnectionTestResult, String> {
     let cfg = read_config(&app)?;
@@ -723,13 +691,8 @@ pub fn test_omniroute_connection(app: AppHandle) -> Result<ConnectionTestResult,
     }
 }
 
-/// The Skill Switch process's own PATH can be stale for a long-lived GUI app that
-/// was already running (or launched from a shortcut set up at an earlier login)
-/// before `npm install -g omniroute` added its bin dir to the user's PATH —
-/// Explorer-launched processes don't pick up env changes until the next logon,
-/// same root cause as the registry read in `check_global_route`. Merge the
-/// registry's current PATH in so a freshly installed npm-global command is found
-/// without requiring a logoff/logon.
+/// Processes started from Explorer keep the PATH from logon, so a fresh
+/// `npm install -g omniroute` isn't found. Merge in the current PATH from the registry.
 fn fresh_path() -> String {
     use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
     use winreg::RegKey;
@@ -784,9 +747,8 @@ pub fn start_omniroute(app: AppHandle, state: State<ProxyState>) -> Result<(), S
         );
     }
 
-    // omniroute is an npm-global .cmd shim; CreateProcess doesn't apply PATHEXT,
-    // so it must be launched through cmd.exe. Stdio piped to null so an unread
-    // pipe never fills and hangs the child.
+    // omniroute is an npm .cmd shim and CreateProcess ignores PATHEXT, so go through
+    // cmd.exe. Stdio goes to null so a full, unread pipe can't hang the child.
     let child = Command::new("cmd")
         .args(["/C", "omniroute"])
         .env("PATH", &path)
@@ -813,8 +775,7 @@ pub fn stop_omniroute(state: State<ProxyState>) -> Result<(), String> {
     if matches!(child.try_wait(), Ok(Some(_))) {
         return Ok(()); // already exited on its own
     }
-    // Kill the whole tree: the Child handle is cmd.exe's, and killing only that
-    // would orphan the node.exe grandchild it launched.
+    // Kill the whole tree. The handle is cmd.exe; killing only that leaves node.exe running.
     let pid = child.id();
     let _ = Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
@@ -824,9 +785,8 @@ pub fn stop_omniroute(state: State<ProxyState>) -> Result<(), String> {
     Ok(())
 }
 
-/// Opens a new terminal in `path` with the OmniRoute env vars set only for that
-/// one process, then runs `claude`. Nothing is written to disk — this is the
-/// route for Desktop-or-terminal use without touching any settings file.
+/// Opens a terminal in `path` with the OmniRoute env vars set for that process only
+/// and runs `claude`. Nothing is written to disk.
 #[tauri::command(async)]
 pub fn open_omniroute_terminal(app: AppHandle, path: String) -> Result<(), String> {
     let project = validate_project_path(&path)?;
@@ -956,9 +916,8 @@ mod tests {
         assert!(validate_project_path("relative\\path").is_err());
         assert!(validate_project_path("C:foo").is_err());
         assert!(validate_project_path("C:\\..\\evil").is_err());
-        // A folder literally named "my..folder" must NOT be rejected by a naive
-        // substring check on "..". It doesn't exist on disk in this test, so it
-        // still errors — but via the "does not exist" path, not path validation.
+        // "my..folder" must pass the ".." check. It doesn't exist here, so the
+        // expected error comes from the existence check instead.
         match validate_project_path("C:\\Users\\nobody\\my..folder") {
             Err(msg) => assert!(msg.contains("existiert nicht"), "should fail on existence, not on \"..\": {msg}"),
             Ok(_) => panic!("should not exist"),
@@ -987,8 +946,7 @@ mod tests {
 
     #[test]
     fn gitignore_check_recognizes_common_patterns() {
-        // Pure function over lines(), no filesystem — using check_gitignore directly
-        // would need a real file, so this exercises the same matching logic inline.
+        // Same matching as check_gitignore, inlined so no real file is needed.
         let matches = |line: &str| {
             matches!(
                 line.trim(),

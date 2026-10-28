@@ -1,13 +1,6 @@
-//! Profiles tab backend: named snapshots of skill states (`{ name, skills: { "<skill
-//! folder name>": "active" | "manual" | "disabled" } }`) so a whole set of skill
-//! states can be applied in one click. Same app-data config-store pattern as
-//! omniroute.rs (`config_path`/`read_config`/`write_config`, own lock, own file).
-//!
-//! This module only stores and validates profiles — it never touches a skill
-//! folder or settings.json itself. Applying a profile is done skill-by-skill from
-//! the frontend via the existing `set_skill_enabled`/`set_skill_manual_only`
-//! commands (see App.tsx's `applyState`), so profiles never drift from how a
-//! single skill's state is actually changed.
+//! Profiles: named snapshots of skill states, stored in profiles.json.
+//! Only stores and validates them; the frontend applies a profile skill by skill
+//! through the normal toggle commands.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -19,15 +12,14 @@ use tauri::{AppHandle, Manager};
 const PROFILES_FILE: &str = "profiles.json";
 const VALID_STATES: [&str; 3] = ["active", "manual", "disabled"];
 
-/// Serializes read-modify-write access to profiles.json. Own mutex, independent of
-/// SETTINGS_LOCK/OMNI_LOCK — a different file, no reason to serialize against those.
+/// Guards read-modify-write of profiles.json.
 static PROFILES_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Profile {
     name: String,
-    /// BTreeMap so the file's key order is stable/diffable across writes.
+    /// BTreeMap keeps the key order in the file stable.
     skills: BTreeMap<String, String>,
 }
 
@@ -38,8 +30,7 @@ struct ProfilesConfig {
 }
 
 // ---------------------------------------------------------------------------
-// App-owned config (%LOCALAPPDATA%\<identifier>\profiles.json) — same shape as
-// omniroute.rs's config store.
+// Config in %LOCALAPPDATA%\<identifier>\profiles.json
 // ---------------------------------------------------------------------------
 
 fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -54,9 +45,7 @@ fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
 fn read_config(app: &AppHandle) -> Result<ProfilesConfig, String> {
     let path = config_path(app)?;
     match fs::read_to_string(&path) {
-        // Corrupt file must error, never silently reset — that would drop the
-        // user's whole profile list without telling them (same reasoning as
-        // omniroute.rs's read_config).
+        // Error out on a corrupt file instead of silently dropping all profiles.
         Ok(s) => serde_json::from_str(&s)
             .map_err(|e| format!("profiles.json ist kein gültiges JSON: {e}")),
         Err(_) => Ok(ProfilesConfig::default()),
@@ -71,13 +60,11 @@ fn write_config(app: &AppHandle, cfg: &ProfilesConfig) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
-// Pure logic (unit-testable, no I/O)
+// Pure logic, no I/O
 // ---------------------------------------------------------------------------
 
-/// Inserts or replaces a profile. Trims the name, rejects an empty name or an
-/// empty skill map, rejects any state other than the three valid ones, and
-/// replaces an existing profile with the same name case-insensitively in place
-/// (keeps its position; a new name is appended).
+/// A profile with the same name (case-insensitive) is replaced in place,
+/// a new one is appended.
 fn upsert(mut profiles: Vec<Profile>, name: &str, skills: BTreeMap<String, String>) -> Result<Vec<Profile>, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {

@@ -1,7 +1,6 @@
 ﻿# Skill Switch context-warning hook (UserPromptSubmit). Windows PowerShell 5.1
-# compatible: no ternary, no ??. Always exits 0; on any error, prints nothing.
-# JSON on stdout with {"systemMessage": "..."} shows a message to the user without
-# touching the model's context and without blocking the prompt.
+# compatible (no ternary, no ??). Always exits 0 and prints nothing on errors.
+# {"systemMessage": "..."} on stdout warns the user without touching the context.
 try {
     $stdin = [Console]::In.ReadToEnd()
     $payload = $stdin | ConvertFrom-Json
@@ -9,8 +8,7 @@ try {
     $sessionId = $payload.session_id
     if (-not $transcriptPath -or -not (Test-Path -LiteralPath $transcriptPath)) { exit 0 }
 
-    # Only the tail: transcripts can be several MB, and the current context only
-    # depends on the last assistant line's usage numbers.
+    # Read only the tail; the context size comes from the last assistant line.
     $fs = [System.IO.File]::Open($transcriptPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
     $len = $fs.Length
     $start = [Math]::Max(0, $len - 524288)
@@ -20,10 +18,8 @@ try {
     $fs.Close()
     $tail = [System.Text.Encoding]::UTF8.GetString($buf)
 
-    # Find the last assistant line in the tail (transcripts are JSONL, one JSON object
-    # per line) instead of regex-searching for "usage":{ anywhere in the tail: a
-    # tool_result can echo transcript text containing that literal (this app reads
-    # transcripts itself) and would otherwise match the wrong line.
+    # Take the last assistant line rather than the last "usage":{ match, since a
+    # tool_result can contain that text as well.
     $lines = $tail -split "`n"
     $assistantLine = $null
     for ($i = $lines.Length - 1; $i -ge 0; $i--) {
@@ -31,9 +27,8 @@ try {
     }
     if (-not $assistantLine) { exit 0 }
 
-    # Pull the three fields directly by name instead of parsing "usage":{...} as JSON:
-    # real transcripts nest a "cache_creation" breakdown object inside usage, so a
-    # naive "up to the first }" match grabs an incomplete, unparseable fragment.
+    # Read the fields by name. usage contains a nested "cache_creation" object, so
+    # matching up to the first } would cut it off.
     function Get-UsageField($text, $name) {
         $m = [regex]::Match($text, '"' + $name + '":(\d+)')
         if ($m.Success) { return [int64]$m.Groups[1].Value }
@@ -45,18 +40,16 @@ try {
     $cacheCreate = Get-UsageField $assistantLine 'cache_creation_input_tokens'
     $context = $inputTok + $cacheRead + $cacheCreate
 
-    # 850k instead of 400k: context is kept on purpose; auto-compact only starts at ~970k.
+    # Auto-compact starts at ~970k, so warn from 850k.
     if ($context -lt 850000) { exit 0 }
 
-    # Don't nag every prompt: only warn again once context grew >= 100k since the
-    # last warning for this session.
+    # Warn again only after another 100k tokens in the same session.
     $appDataDir = Join-Path $env:LOCALAPPDATA 'com.skillswitch.app'
     New-Item -ItemType Directory -Path $appDataDir -Force | Out-Null
     $statePath = Join-Path $appDataDir 'context-hook-state.json'
 
-    # Several Claude Code sessions can hit this hook at once; a named mutex serializes
-    # the read-modify-write so a concurrent run can't clobber another session's entry.
-    # On timeout, skip the state update (no dedupe bookkeeping) but still warn below.
+    # Named mutex so concurrent sessions don't overwrite each other's state.
+    # On timeout, skip the state update but still warn.
     $mutex = New-Object System.Threading.Mutex($false, 'Global\SkillSwitchContextHook')
     $gotLock = $mutex.WaitOne(2000)
     try {
@@ -71,8 +64,7 @@ try {
             if ($state.ContainsKey($sessionId)) { $lastWarned = $state[$sessionId] }
             if ($lastWarned -gt 0 -and ($context - $lastWarned) -lt 100000) { exit 0 }
 
-            # Bounded but crude: once the file accumulates entries from many old
-            # sessions, just keep the current one instead of growing forever.
+            # Crude size cap: start over once more than 200 sessions are stored.
             if ($state.Count -gt 200) { $state = @{} }
             $state[$sessionId] = $context
             ($state | ConvertTo-Json -Compress) | Set-Content -LiteralPath $statePath -Encoding UTF8

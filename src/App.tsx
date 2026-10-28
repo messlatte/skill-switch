@@ -86,8 +86,7 @@ function App() {
   const [notifyBlocked, setNotifyBlocked] = useState(false)
   const notifyMemo = useRef<Map<string, Memo>>(new Map())
 
-  // Reads hundreds of MB of transcripts, so only on demand: first visit to the
-  // tab, then via the refresh button — never at app start.
+  // Reads hundreds of MB, so only on first tab visit or refresh, not at startup.
   const refreshUsage = () => {
     setUsageLoading(true)
     setUsageError(null)
@@ -102,8 +101,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view])
 
-  // Polls app-wide (not just while the Live tab is open) so a session getting into
-  // trouble can still raise a notification while the user works in another tab.
+  // Polls even when the Live tab is closed, so notifications still fire.
   useEffect(() => {
     let cancelled = false
     const tick = () =>
@@ -144,8 +142,7 @@ function App() {
     try {
       localStorage.setItem(NOTIFY_KEY, enabled ? "1" : "0")
     } catch {
-      // ponytail: localStorage can throw in a locked-down profile; the toggle still
-      // works for this session, it just won't persist.
+      // localStorage can throw in locked-down profiles; then the setting just isn't saved.
     }
   }
 
@@ -171,8 +168,7 @@ function App() {
       .then(setEnv)
       .catch((e) => toast.error(String(e)))
       .finally(() => setEnvLoading(false))
-    // App-startup check, not tab-open: an accidental global override affects every
-    // project, not just ones opted into OmniRoute, so it needs to surface up front.
+    // Checked at startup because a global override affects every project.
     checkGlobalRoute()
       .then((w) => setGlobalWarn(w.settingsJson || w.userEnv || w.machineEnv ? w : null))
       .catch((e) => toast.error(String(e)))
@@ -184,8 +180,7 @@ function App() {
     disabled: "deaktiviert",
   }
 
-  // Core transition, no pending-tracking/toast — shared by the single-skill and
-  // group handlers below so the two don't drift out of sync.
+  // Shared by the single-skill and group handlers; no pending state or toast here.
   async function applyState(skill: Skill, next: SkillState) {
     if (next === "disabled") {
       await setSkillEnabled(skill.name, false)

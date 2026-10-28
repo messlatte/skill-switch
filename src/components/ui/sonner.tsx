@@ -3,8 +3,7 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
-// Theme follows the system directly (see main.tsx); sonner's own "system"
-// mode already watches prefers-color-scheme, so no next-themes needed here.
+// sonner's "system" theme follows prefers-color-scheme, so no next-themes needed.
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner

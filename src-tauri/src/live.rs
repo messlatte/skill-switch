@@ -1,15 +1,6 @@
-//! Live tab: which Claude Code sessions are active right now (Desktop app and CLI
-//! write the same transcripts — 99 % of this machine's lines say
-//! `entrypoint: claude-desktop`), how big their context currently is, and what to do
-//! before the next prompt. The frontend polls; every poll reads only the bytes
-//! appended since the last one (per-session cursor in managed state), so polling
-//! stays cheap on 100 MB transcripts. Nothing is stored; a session's cursor lives
-//! only as long as the app window.
-//!
-//! Honest limits: there is no documented way to trigger `/compact` or `/clear` inside
-//! a running session from outside, and no local live percentage of the 5h limit.
-//! So advice is text plus a copyable command, and the limit shows only as "hit,
-//! resets in …" when the transcript recorded a rejection.
+//! Live tab: active Claude Code sessions, their context size and advice for the next
+//! prompt. Each poll reads only the bytes appended since the last one.
+//! `/compact` can't be triggered from outside, so advice comes with a command to copy.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -24,7 +15,7 @@ use tauri::State;
 use crate::claude_dir;
 use crate::usage::{parse_ts, project_label};
 
-// Rules — same style as usage.rs: one block, tune here.
+// Rules
 const ACTIVE_SECS: i64 = 10 * 60; // written within 10 min = active
 const SHOW_SECS: i64 = 6 * 60 * 60; // listed (as idle) up to 6 h
 const CTX_COMPACT_NOW: u64 = 400_000;
@@ -157,7 +148,7 @@ struct Quota {
 }
 
 impl Cursor {
-    /// Consume one complete transcript line. Pure over the cursor — unit-tested.
+    /// Consumes one complete transcript line.
     fn feed(&mut self, raw: &str) {
         let Ok(line) = serde_json::from_str::<Line>(raw) else { return };
         if let Some(ts) = parse_ts(&line.timestamp) {
@@ -217,8 +208,8 @@ impl Cursor {
             }
             "assistant" => {
                 if let Some(u) = msg.usage {
-                    // Several lines share one requestId (one per content block) and
-                    // they are consecutive — count a request when the id changes.
+                    // A request spans consecutive lines (one per content block), so
+                    // count a new request when the id changes.
                     if line.request_id.is_some() && line.request_id != self.last_request_id {
                         self.requests += 1;
                         self.turn_requests += 1;
@@ -253,9 +244,8 @@ impl Cursor {
         let mut buf = Vec::with_capacity(want as usize);
         f.take(want).read_to_end(&mut buf).map_err(|e| e.to_string())?;
         let Some(last_nl) = buf.iter().rposition(|&b| b == b'\n') else {
-            // No newline: either a line still being written (wait for it) or a single
-            // line bigger than MAX_CHUNK — skip that one rather than re-reading the
-            // same window forever and freezing this session's cursor.
+            // No newline yet: the line is still being written, or it is longer than
+            // MAX_CHUNK. Skip the latter, otherwise the cursor would never move again.
             if buf.len() as u64 >= MAX_CHUNK {
                 self.scanned = len;
             }
@@ -282,7 +272,7 @@ pub(crate) fn advice(s: &LiveSession) -> Vec<Advice> {
     };
     let k = |n: u64| format!("{}k", n / 1_000);
 
-    // Compact advice is always present — the user asked for it as the standing nudge.
+    // Context advice is always shown, even when it's fine.
     if s.context >= CTX_COMPACT_NOW {
         out.push(a(
             "high",
@@ -365,8 +355,7 @@ pub fn list_live_sessions(state: State<LiveState>) -> Result<Vec<LiveSession>, S
     collect(&root, &mut cursors, now_secs())
 }
 
-/// The command minus Tauri plumbing, so it can run against the real transcripts in
-/// a test with a throwaway cursor map.
+/// The command without Tauri state, so tests can run it on real transcripts.
 fn collect(root: &Path, cursors: &mut HashMap<PathBuf, Cursor>, now: i64) -> Result<Vec<LiveSession>, String> {
     let mut out = Vec::new();
     let Ok(projects) = fs::read_dir(root) else { return Ok(out) };

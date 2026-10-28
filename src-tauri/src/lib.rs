@@ -14,13 +14,11 @@ use std::sync::Mutex;
 
 const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 
-/// Serializes read-modify-write access to settings.json across concurrent commands
-/// (e.g. two skills toggled to "manual" within the same moment would otherwise race).
-/// `pub(crate)` so hook.rs's settings.json patch (context-hook install/uninstall)
-/// serializes against the same file too.
+/// Guards read-modify-write of settings.json; two quick toggles would race otherwise.
+/// hook.rs uses it too.
 pub(crate) static SETTINGS_LOCK: Mutex<()> = Mutex::new(());
 
-// camelCase so struct fields line up with the TypeScript types without a manual mapper.
+// camelCase to match the TypeScript types.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct Skill {
@@ -28,16 +26,13 @@ struct Skill {
     description: String,
     skill_md_path: Option<String>,
     enabled: bool,
-    /// true if `skillOverrides[name] == "user-invocable-only"` in settings.json —
-    /// only meaningful while `enabled` (Claude Code only applies overrides to skills
-    /// it can actually see under ~/.claude/skills).
+    /// `skillOverrides[name] == "user-invocable-only"` in settings.json. Only
+    /// meaningful while `enabled`; Claude Code ignores overrides for hidden skills.
     manual_only: bool,
     linked: bool,
-    /// "owner/repo" this skill was installed from, if it's tracked in a
-    /// `~/.agents/.skill-lock.json` (used by some skill-registry tools). None for
-    /// skills placed by hand or via a tool that doesn't write that lock file.
+    /// "owner/repo" from `~/.agents/.skill-lock.json`, if the skill is listed there.
     source: Option<String>,
-    /// Clickable https URL for `source` (the lock file's `.git` remote, `.git` stripped).
+    /// https URL for `source` (the lock file's git remote without `.git`).
     source_url: Option<String>,
 }
 
@@ -121,11 +116,8 @@ fn strip_quotes(s: &str) -> &str {
     }
 }
 
-/// Best-effort lookup of which GitHub repo each skill was installed from, read from
-/// `~/.agents/.skill-lock.json` (the lock file written by skill-registry tools that
-/// manage `~/.agents/skills` — the junction target for most of a user's skills).
-/// Returns an empty map if that file doesn't exist; that's the normal case for
-/// skills installed by hand, and the app just shows them with no known source.
+/// Reads which GitHub repo each skill came from out of `~/.agents/.skill-lock.json`.
+/// Empty if the file doesn't exist, which is normal for skills installed by hand.
 fn read_skill_lock() -> std::collections::HashMap<String, (String, String)> {
     let mut map = std::collections::HashMap::new();
     let Ok(profile) = std::env::var("USERPROFILE") else {
@@ -171,9 +163,8 @@ fn read_skills_in(
             continue;
         };
         let path = entry.path();
-        // DirEntry::file_type() reports reparse points (junctions/symlinks) as neither
-        // dir nor file on Windows, even when they point at a directory. Resolve those
-        // explicitly instead of silently dropping every linked skill from the list.
+        // On Windows, file_type() reports junctions and symlinks as neither dir nor
+        // file, so resolve them or every linked skill drops out of the list.
         let is_dir = file_type.is_dir() || (file_type.is_symlink() && path.is_dir());
         if !is_dir {
             continue;
@@ -216,8 +207,7 @@ fn list_skills() -> Result<Vec<Skill>, String> {
     fs::create_dir_all(&disabled_dir)
         .map_err(|e| format!("Konnte \"skills-disabled\" nicht anlegen: {e}"))?;
 
-    // Best-effort: a missing/corrupt settings.json just means no overrides are shown,
-    // it doesn't stop the skill list from loading.
+    // A missing or broken settings.json only means no overrides are shown.
     let overrides = read_settings()
         .ok()
         .and_then(|v| v.get("skillOverrides").cloned())
@@ -289,8 +279,8 @@ fn set_skill_enabled(name: String, enabled: bool) -> Result<(), String> {
     fs::rename(&src, &dst).map_err(|e| translate_move_error(&e, &name))?;
 
     if !enabled {
-        // The skill no longer exists under ~/.claude/skills, so any override for it is
-        // inert. Best-effort tidy-up: don't fail the (already successful) move over it.
+        // The override does nothing once the skill is gone. Best-effort cleanup,
+        // the move itself already succeeded.
         let _ = set_skill_override(&name, None);
     }
     Ok(())
@@ -322,8 +312,7 @@ pub(crate) fn write_settings(value: &Value) -> Result<(), String> {
     fs::write(&path, text).map_err(|e| format!("Konnte settings.json nicht schreiben: {e}"))
 }
 
-/// Pure JSON patch: set or remove `skillOverrides[name]`, leaving every other key
-/// untouched, and dropping the (now-empty) `skillOverrides` object if it was the last entry.
+/// Sets or removes `skillOverrides[name]` and drops `skillOverrides` once it is empty.
 fn apply_skill_override(mut settings: Value, name: &str, value: Option<&str>) -> Result<Value, String> {
     let obj = settings
         .as_object_mut()

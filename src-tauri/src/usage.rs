@@ -1,9 +1,6 @@
-//! Usage tab backend: on-demand, metadata-only analysis of the local Claude Code
-//! transcripts under `~/.claude/projects/**/*.jsonl`. Reads token counts, model,
-//! effort, tool names and error/compaction/rate-limit markers — never prompt text,
-//! answers or file contents. Nothing is written anywhere; the report lives only in
-//! the open window. The JSONL files already are the database, so there is no
-//! collector, no SQLite, no hooks into Claude Code (see CLAUDE.md).
+//! Usage tab: on-demand analysis of the Claude Code transcripts in `~/.claude/projects`.
+//! Reads metadata only (tokens, model, effort, tool names, error markers), never
+//! message text, and writes nothing.
 
 use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
@@ -16,10 +13,8 @@ use std::path::{Path, PathBuf};
 use crate::claude_dir;
 
 // ---------------------------------------------------------------------------
-// Analyzer rules — all heuristics live here so they can be tuned in one place.
-// The weights mirror Anthropic's public API price ratios; how the subscription
-// rate limit weights cached tokens is NOT locally observable, so every "share"
-// derived from them is labelled "berechnet"/"heuristik" in the UI, never "gemessen".
+// Analyzer rules. Weights follow the public API price ratios. How the subscription
+// limit weighs cached tokens can't be observed locally, so these shares are estimates.
 // ---------------------------------------------------------------------------
 const W_INPUT: f64 = 1.0;
 const W_CACHE_WRITE: f64 = 1.25;
@@ -84,7 +79,7 @@ impl Tokens {
 pub struct Named {
     pub name: String,
     pub tokens: Tokens,
-    /// Share of the weighted total — heuristic, see weights above.
+    /// Share of the weighted total (see weights above).
     pub share_pct: u8,
 }
 
@@ -137,7 +132,7 @@ pub struct Finding {
     pub basis: String,
 }
 
-/// One row of the 14-day trend list — always present, even for days with no activity.
+/// One day of the 14-day list. Days without activity are included.
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DayRow {
@@ -148,8 +143,8 @@ pub struct DayRow {
     pub weighted: f64,
 }
 
-/// Aggregate over a 7-day window, used for the "letzte 7 Tage vs. 7 Tage davor" comparison.
-/// Percentages are of that period's own weighted total (0 when the period had no data).
+/// Totals for one 7-day window. Percentages refer to that window's own weighted
+/// total (0 if it had no data).
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PeriodStats {
@@ -170,7 +165,7 @@ pub struct Trend {
     pub previous: PeriodStats,
 }
 
-/// A marker that a skill or MCP server was involved in a message — correlation, not cost.
+/// Skill or MCP server seen in a message. Correlation only, not cost.
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AttributionUsage {
@@ -219,16 +214,16 @@ pub struct UsageReport {
     pub findings: Vec<Finding>,
     /// Last 14 calendar days ending today, one row per day even if empty.
     pub days: Vec<DayRow>,
-    /// Letzte 7 Tage vs. 7 Tage davor, same heuristic weighting as the rest of the tab.
+    /// Last 7 days vs. the 7 days before.
     pub trend: Trend,
-    /// From `attributionSkill` transcript markers — correlation, never a cost. Sorted by messages desc.
+    /// From `attributionSkill` transcript markers. Sorted by messages desc.
     pub skill_usage: Vec<AttributionUsage>,
     /// From `attributionMcpServer` transcript markers. Sorted by messages desc.
     pub mcp_usage: Vec<AttributionUsage>,
 }
 
 // ---------------------------------------------------------------------------
-// Transcript line shape — only the fields we read. serde ignores the rest.
+// Transcript lines: only the fields we read, serde ignores the rest.
 // ---------------------------------------------------------------------------
 
 #[derive(Deserialize, Default)]
@@ -268,8 +263,8 @@ struct Msg {
     model: Option<String>,
     #[serde(default)]
     usage: Option<Usage>,
-    // ponytail: parsed as Value even for huge thinking blocks — fine at ~1 GB of
-    // transcripts in release; switch to a streaming visitor if that ever hurts.
+    // Parsed as Value even for huge thinking blocks. Fast enough for ~1 GB of
+    // transcripts in release; a streaming visitor would be the next step.
     #[serde(default)]
     content: Value,
 }
@@ -373,7 +368,7 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 // ---------------------------------------------------------------------------
-// Timestamps — ISO 8601 "YYYY-MM-DDTHH:MM:SS(.fff)Z" without pulling in chrono.
+// Timestamps: ISO 8601 "YYYY-MM-DDTHH:MM:SS(.fff)Z", parsed without chrono.
 // ---------------------------------------------------------------------------
 
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
@@ -401,7 +396,7 @@ fn day_of(ts: &str) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Aggregation — fed line by line, no I/O of its own (unit-testable).
+// Aggregation, fed line by line (no I/O)
 // ---------------------------------------------------------------------------
 
 struct Req {
@@ -413,9 +408,8 @@ struct Req {
     day: Option<String>,
 }
 
-/// Per-day rollup feeding `trend()`. Turns/five_hour_hits come straight off transcript
-/// lines in `feed`; tokens/xhigh_weighted/workflow_weighted come from the deduped
-/// requests in `finish` (same "last value per requestId" dedupe as everything else).
+/// Per-day totals for `trend()`. Turns and limit hits are counted in `feed`,
+/// token sums in `finish` from the deduped requests.
 #[derive(Default, Clone, Copy)]
 pub(crate) struct DayStats {
     pub tokens: Tokens,
@@ -425,11 +419,8 @@ pub(crate) struct DayStats {
     pub five_hour_hits: u64,
 }
 
-/// Raw accumulator for one attribution marker name (skill or MCP server) before it's
-/// turned into the public `AttributionUsage`. `messages` counts every transcript line
-/// carrying the marker — verified against a raw grep on real transcripts, these markers
-/// repeat once per line of a multi-line response, not once per API request, so this is
-/// intentionally NOT deduped by requestId like the token totals above.
+/// Counts for one skill or MCP server. The marker repeats on every line of a multi-line
+/// response, so unlike the token totals this is not deduped by requestId.
 #[derive(Default)]
 struct AttribUsage {
     messages: u64,
@@ -448,9 +439,7 @@ fn record_attribution(map: &mut HashMap<String, AttribUsage>, name: String, sess
     }
 }
 
-/// Plugin skills are marked `plugin::skill` in transcripts but live on disk as the
-/// folder `plugin-skill` (see CLAUDE.md skill-lock note) — normalise so matching by
-/// name against the skills list works.
+/// Transcripts write plugin skills as `plugin::skill`; the folder on disk is `plugin-skill`.
 fn normalize_skill_name(raw: &str) -> String {
     match raw.split_once(':') {
         Some((a, b)) => format!("{a}-{b}"),
@@ -552,9 +541,8 @@ impl Aggregator {
             sess.compactions += 1;
         }
 
-        // Attribution markers are top-level fields on the line, independent of message
-        // shape — read them before the message-dependent logic below, which returns
-        // early for several line shapes (user turns, non-assistant lines).
+        // Attribution markers are top-level fields, so read them before the early
+        // returns below.
         if line.attribution_skill.is_some() || line.attribution_mcp_server.is_some() {
             let day = day_of(&line.timestamp);
             if let Some(raw) = &line.attribution_skill {
@@ -887,9 +875,8 @@ fn day_index(s: &str) -> Option<i64> {
     Some(days_from_civil(y, m, d))
 }
 
-/// Splits a day→DayStats map into a 14-day row list and a current-vs-previous-7-days
-/// trend, both ending at `today` (YYYY-MM-DD). Pure and total: days missing from the
-/// map (no activity) contribute zeros, never NaN or a panic.
+/// Builds the 14-day rows and the 7-vs-7-day trend ending at `today` (YYYY-MM-DD).
+/// Days missing from the map count as zero.
 pub(crate) fn trend(days: &HashMap<String, DayStats>, today: &str) -> (Trend, Vec<DayRow>) {
     let today_idx = day_index(today).unwrap_or(0);
 
@@ -942,7 +929,7 @@ pub(crate) fn trend(days: &HashMap<String, DayStats>, today: &str) -> (Trend, Ve
 }
 
 // ---------------------------------------------------------------------------
-// Deterministic recommendation rules — pure over the report numbers.
+// Recommendation rules, computed from the report numbers only
 // ---------------------------------------------------------------------------
 
 fn k(n: u64) -> String {
@@ -1122,8 +1109,7 @@ mod tests {
         let m2 = FileMeta { kind: Kind::Main, project: "P".into(), session: "s2".into() };
         a.begin_file(&m1);
         a.begin_file(&m2);
-        // Same requestId, two lines — verified against real transcripts that the marker
-        // repeats per line, not per API request, so both lines must count separately.
+        // Same requestId on two lines: the marker repeats per line, so both count.
         a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-01T10:00:00Z","requestId":"r1","attributionSkill":"claude-api","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-01T10:00:01Z","requestId":"r1","attributionSkill":"claude-api","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-02T10:00:00Z","uuid":"u2","attributionSkill":"anthropic-skills:pdf","attributionMcpServer":"Claude Browser","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);

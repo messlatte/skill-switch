@@ -1,7 +1,5 @@
-//! Context-warning hook: a `UserPromptSubmit` hook that runs a bundled PowerShell
-//! script (see `hooks/context-hook.ps1`) which prints a `systemMessage` — shown to
-//! the user, never injected into the model's context, never blocking — once a
-//! session's context crosses 850k tokens. See CLAUDE.md's "## Kontext-Hook".
+//! Context warning: a `UserPromptSubmit` hook running `hooks/context-hook.ps1`, which
+//! shows the user a `systemMessage` once a session's context passes 850k tokens.
 
 use serde::Serialize;
 use serde_json::Value;
@@ -32,21 +30,16 @@ fn script_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join(SCRIPT_FILE_NAME))
 }
 
-/// Overwrites the script file with the currently embedded version — called on every
-/// install so an app update's script changes propagate to already-installed hooks.
-/// `hooks/context-hook.ps1` is saved with a UTF-8 BOM (kept as-is by `include_str!`
-/// and written straight through here): Windows PowerShell 5.1 falls back to the
-/// system ANSI codepage for a script with no BOM, mangling the message's "≈"/"—".
+/// Rewritten on every install so app updates reach existing hooks. The script keeps
+/// its UTF-8 BOM; without it PowerShell 5.1 reads it as ANSI and garbles "≈".
 fn write_script(app: &AppHandle) -> Result<PathBuf, String> {
     let path = script_path(app)?;
     fs::write(&path, SCRIPT_CONTENT).map_err(|e| format!("Konnte Hook-Skript nicht schreiben: {e}"))?;
     Ok(path)
 }
 
-/// True if any of `args` (a hook command's `args` array) is our hook script,
-/// matched by shape rather than the full current path: a string ending in
-/// `context-hook.ps1`, case-insensitive (`/` vs `\` doesn't affect a suffix match).
-/// This way an entry left over from an older install location still counts as ours.
+/// Matches by file name, not full path, so entries from an older install location
+/// still count as ours.
 fn args_reference_script(args: &[Value]) -> bool {
     args.iter()
         .any(|a| a.as_str().is_some_and(|s| s.to_lowercase().ends_with("context-hook.ps1")))
@@ -81,9 +74,8 @@ fn build_hook_entry(script: &str) -> Value {
     })
 }
 
-/// Pure JSON patch (unit-testable, no I/O) — same shape as `apply_skill_override`/
-/// `apply_route`. Adds exactly one `hooks.UserPromptSubmit` entry for our script
-/// (idempotent) or removes only that entry, leaving every other hook/key untouched.
+/// Adds one `hooks.UserPromptSubmit` entry for our script (idempotent) or removes
+/// only that entry. Other hooks stay untouched.
 pub(crate) fn apply_context_hook(mut settings: Value, script: &str, enable: bool) -> Result<Value, String> {
     let obj = settings
         .as_object_mut()
@@ -145,7 +137,7 @@ fn apply_hook_setting(app: &AppHandle, script: &str, enable: bool) -> Result<(),
     }
 
     if file_existed {
-        // Best-effort, same as OmniRoute: a backup failure warns, never blocks the write.
+        // A failed backup only warns, it doesn't block the write.
         if let Some(warning) = rotate_backup(app, "settings", "settings.json", &original_text) {
             log::warn!("Kontext-Hook: {warning}");
         }
@@ -171,8 +163,8 @@ pub fn install_context_hook(app: AppHandle) -> Result<(), String> {
     apply_hook_setting(&app, &script, true)
 }
 
-/// Removes only our settings.json entry. The script file is left in place under app
-/// data — it's inert without the hook entry, and re-installing later needs it anyway.
+/// Removes only our settings.json entry. The script file stays; it does nothing
+/// without the entry.
 #[tauri::command]
 pub fn uninstall_context_hook(app: AppHandle) -> Result<(), String> {
     let script = script_path(&app)?.to_string_lossy().to_string();

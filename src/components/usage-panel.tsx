@@ -122,8 +122,7 @@ function Findings({ findings }: { findings: Finding[] }) {
   )
 }
 
-// Lower is better for every one of these metrics (context, requests, effort, workflows,
-// limit hits) — there is no metric here where "more" is the goal.
+// Lower is better for all of these metrics.
 function delta(cur: number, prev: number): { text: string; className: string; Arrow?: typeof ArrowUp } {
   if (prev === 0) {
     if (cur === 0) return { text: "± 0 %", className: "text-muted-foreground" }

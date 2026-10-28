@@ -1,7 +1,6 @@
 import type { Advice, LiveSession } from "@/lib/api"
 
-// One memo per session, carried across polls in App.tsx. Pure so it's easy to test
-// by hand: same inputs, same { events, next } every time.
+// Per-session notification state, kept across polls in App.tsx.
 export type Memo = {
   compactHigh: boolean
   /** turns value we already notified "loop" for, so it fires at most once per turn. */
@@ -16,9 +15,8 @@ const emptyMemo = (): Memo => ({ compactHigh: false, loopTurnAt: null, limitRese
 
 const findAdvice = (advice: Advice[], pred: (a: Advice) => boolean) => advice.find(pred)
 
-/** Decides which sessions deserve a notification since the last poll, and returns the
- *  updated memo to carry forward. First poll (prev empty) only seeds the memo — no
- *  burst of notifications for conditions that already existed when the app started. */
+/** Returns the notifications since the last poll and the updated memo. The first
+ *  poll only fills the memo, so app start doesn't fire a burst of old warnings. */
 export function notificationsFor(
   prev: Map<string, Memo>,
   sessions: LiveSession[]
