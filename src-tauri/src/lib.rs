@@ -227,7 +227,9 @@ fn list_skills() -> Result<Vec<Skill>, String> {
 }
 
 fn validate_skill_name(name: &str) -> Result<(), String> {
+    // "." passes the other checks, but joined to a folder it means the folder itself.
     if name.is_empty()
+        || name == "."
         || name.contains('/')
         || name.contains('\\')
         || name.contains(':')
@@ -266,11 +268,6 @@ fn set_skill_enabled(name: String, enabled: bool) -> Result<(), String> {
     };
     let src = src_dir.join(&name);
     let dst = dst_dir.join(&name);
-
-    // Defense in depth: the validated name must not have escaped its parent.
-    if src.parent() != Some(src_dir.as_path()) || dst.parent() != Some(dst_dir.as_path()) {
-        return Err(format!("Ungültiger Skill-Name: \"{name}\"."));
-    }
 
     if fs::symlink_metadata(&src).is_err() {
         return Err(format!(
@@ -564,7 +561,33 @@ mod tests {
         assert!(validate_skill_name("a/b").is_err());
         assert!(validate_skill_name("a\\b").is_err());
         assert!(validate_skill_name("").is_err());
+        assert!(validate_skill_name(".").is_err());
         assert!(validate_skill_name("normal-skill").is_ok());
+    }
+
+    #[test]
+    fn accepted_skill_names_stay_inside_their_folder() {
+        let base = Path::new("C:\\Users\\you\\.claude\\skills");
+        for name in [
+            "normal-skill",
+            "x.y",
+            "x.",
+            " x",
+            ".",
+            "..",
+            "a/b",
+            "a\\b",
+            "C:x",
+            "\\\\server\\share",
+        ] {
+            if validate_skill_name(name).is_ok() {
+                assert_eq!(
+                    base.join(name).parent(),
+                    Some(base),
+                    "{name:?} is accepted but leaves the folder"
+                );
+            }
+        }
     }
 
     #[test]
