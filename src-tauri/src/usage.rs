@@ -1267,7 +1267,7 @@ mod tests {
         // Same requestId on two lines: the marker repeats per line, so both count.
         a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-01T10:00:00Z","requestId":"r1","attributionSkill":"claude-api","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-01T10:00:01Z","requestId":"r1","attributionSkill":"claude-api","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
-        a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-02T10:00:00Z","uuid":"u2","attributionSkill":"anthropic-skills:pdf","attributionMcpServer":"Claude Browser","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
+        a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-02T10:00:00Z","uuid":"u2","attributionSkill":"anthropic-skills:pdf","attributionMcpServer":"github","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         a.feed(&m2, r#"{"type":"assistant","timestamp":"2026-09-03T10:00:00Z","uuid":"u3","attributionSkill":"anthropic-skills:pdf","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         let r = a.finish();
         let pdf = r
@@ -1288,12 +1288,8 @@ mod tests {
             "two lines sharing a requestId both count — not deduped"
         );
         assert_eq!(api.sessions, 1);
-        let browser = r
-            .mcp_usage
-            .iter()
-            .find(|s| s.name == "Claude Browser")
-            .unwrap();
-        assert_eq!(browser.messages, 1);
+        let github = r.mcp_usage.iter().find(|s| s.name == "github").unwrap();
+        assert_eq!(github.messages, 1);
     }
 
     #[test]

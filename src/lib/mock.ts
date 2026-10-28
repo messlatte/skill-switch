@@ -15,63 +15,66 @@ import type {
 
 const skills: Skill[] = [
   {
-    name: "humanizer",
-    description: "Rewrite AI-sounding text so it reads naturally without changing what it says.",
-    skillMdPath: "C:\\Users\\you\\.claude\\skills\\humanizer\\SKILL.md",
+    name: "pdf",
+    description: "Extract text and tables from PDF files, fill in forms, merge and split documents.",
+    skillMdPath: "C:\\Users\\you\\.claude\\skills\\pdf\\SKILL.md",
     enabled: true,
     manualOnly: false,
     linked: true,
-    source: "blader/humanizer",
-    sourceUrl: "https://github.com/blader/humanizer",
+    source: "anthropics/skills",
+    sourceUrl: "https://github.com/anthropics/skills",
   },
   {
-    name: "playwright-cli",
-    description: "Automate browser interactions, test web pages and work with Playwright tests.",
-    skillMdPath: "C:\\Users\\you\\.claude\\skills\\playwright-cli\\SKILL.md",
+    name: "xlsx",
+    description: "Create and edit spreadsheets with formulas, formatting and charts.",
+    skillMdPath: "C:\\Users\\you\\.claude\\skills\\xlsx\\SKILL.md",
+    enabled: true,
+    manualOnly: false,
+    linked: true,
+    source: "anthropics/skills",
+    sourceUrl: "https://github.com/anthropics/skills",
+  },
+  {
+    name: "webapp-testing",
+    description: "Test local web apps with Playwright: screenshots, console logs and UI checks.",
+    skillMdPath: "C:\\Users\\you\\.claude\\skills\\webapp-testing\\SKILL.md",
+    enabled: false,
+    manualOnly: false,
+    linked: true,
+    source: "anthropics/skills",
+    sourceUrl: "https://github.com/anthropics/skills",
+  },
+  {
+    name: "git-commit-helper",
+    description: "Write a commit message from the staged diff.",
+    skillMdPath: "C:\\Users\\you\\.claude\\skills\\git-commit-helper\\SKILL.md",
     enabled: true,
     manualOnly: true,
     linked: false,
     source: null,
     sourceUrl: null,
   },
-  {
-    name: "gsap-core",
-    description: "Official GSAP skill for the core API.",
-    skillMdPath: "C:\\Users\\you\\.claude\\skills\\gsap-core\\SKILL.md",
-    enabled: false,
-    manualOnly: false,
-    linked: true,
-    source: "greensock/gsap-skills",
-    sourceUrl: "https://github.com/greensock/gsap-skills",
-  },
-  {
-    name: "gsap-utils",
-    description: "gsap.utils helpers — clamp, mapRange, random, snap, toArray, wrap.",
-    skillMdPath: "C:\\Users\\you\\.claude\\skills\\gsap-utils\\SKILL.md",
-    enabled: true,
-    manualOnly: false,
-    linked: true,
-    source: "greensock/gsap-skills",
-    sourceUrl: "https://github.com/greensock/gsap-skills",
-  },
 ]
 
 let profiles: Profile[] = [
   {
-    name: "Website-Projekt",
-    skills: { humanizer: "active", "playwright-cli": "manual", "gsap-core": "disabled", "gsap-utils": "disabled" },
+    name: "Dokumente",
+    skills: { pdf: "active", xlsx: "active", "webapp-testing": "disabled", "git-commit-helper": "manual" },
   },
   {
     name: "Minimal",
-    skills: { humanizer: "disabled", "playwright-cli": "disabled", "gsap-core": "disabled", "gsap-utils": "active" },
+    skills: { pdf: "disabled", xlsx: "disabled", "webapp-testing": "disabled", "git-commit-helper": "manual" },
   },
 ]
 
 const env: EnvInfo = {
-  mcpServers: [{ name: "chrome-devtools", scope: "Global" }],
+  mcpServers: [
+    { name: "github", scope: "Global" },
+    { name: "postgres", scope: "C:\\Users\\you\\data-pipeline" },
+  ],
   plugins: [
-    { id: "ponytail@ponytail", version: "4.9.0", enabled: true },
-    { id: "impeccable@impeccable", version: "4.1.1", enabled: true },
+    { id: "code-review@team-plugins", version: "1.2.0", enabled: true },
+    { id: "release-notes@team-plugins", version: "0.4.1", enabled: false },
   ],
 }
 
@@ -80,7 +83,7 @@ const omniState: OmniState = {
   apiKeySet: true,
   projects: [
     {
-      path: "C:\\Users\\you\\Code\\wegwerf-projekt",
+      path: "C:\\Users\\you\\prototype",
       exists: true,
       active: true,
       baseUrl: "http://localhost:20128/v1",
@@ -90,7 +93,7 @@ const omniState: OmniState = {
       error: null,
     },
     {
-      path: "C:\\Users\\you\\Code\\anderes-projekt",
+      path: "C:\\Users\\you\\data-pipeline",
       exists: true,
       active: false,
       baseUrl: null,
@@ -109,7 +112,7 @@ const live: LiveSession[] = [
     id: "a3f9c210",
     title: "Refactor settings page",
     project: "my-website",
-    cwd: "C:\\Users\\you\\Documents\\my-website",
+    cwd: "C:\\Users\\you\\my-website",
     entrypoint: "Desktop",
     active: true,
     secondsSinceActivity: 12,
@@ -256,12 +259,12 @@ const usage: UsageReport = {
     previous: { daysActive: 6, requests: 2_200, avgContext: 260_000, requestsPerTurn: 11, xhighPct: 45, workflowPct: 30, fiveHourHits: 4, weighted: 1.8e12 },
   },
   skillUsage: [
-    { name: "humanizer", messages: 24, sessions: 4, lastDay: "2026-08-27" },
-    { name: "gsap-utils", messages: 9, sessions: 2, lastDay: "2026-08-20" },
+    { name: "pdf", messages: 24, sessions: 4, lastDay: "2026-08-27" },
+    { name: "git-commit-helper", messages: 9, sessions: 6, lastDay: "2026-08-28" },
   ],
   mcpUsage: [
-    { name: "chrome-devtools", messages: 120, sessions: 4, lastDay: "2026-08-26" },
-    { name: "Claude Browser", messages: 300, sessions: 7, lastDay: "2026-08-28" },
+    { name: "github", messages: 120, sessions: 7, lastDay: "2026-08-28" },
+    { name: "postgres", messages: 45, sessions: 2, lastDay: "2026-08-21" },
   ],
 }
 

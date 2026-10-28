@@ -503,10 +503,10 @@ mod tests {
 
     #[test]
     fn description_block_scalar_pipe() {
-        let content = "---\nname: humanizer\ndescription: |\n  Rewrite AI-sounding text so it reads naturally.\n  Second line.\nlicense: MIT\n---\nBody\n";
+        let content = "---\nname: pdf\ndescription: |\n  Extract text and tables from PDF files.\n  Second line.\nlicense: MIT\n---\nBody\n";
         assert_eq!(
             parse_description(content),
-            "Rewrite AI-sounding text so it reads naturally."
+            "Extract text and tables from PDF files."
         );
     }
 

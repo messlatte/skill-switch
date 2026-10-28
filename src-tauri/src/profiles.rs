@@ -165,15 +165,10 @@ mod tests {
 
     #[test]
     fn upsert_adds_new_profile() {
-        let profiles = upsert(
-            Vec::new(),
-            "Website-Projekt",
-            skills(&[("humanizer", "active")]),
-        )
-        .unwrap();
+        let profiles = upsert(Vec::new(), "Website-Projekt", skills(&[("pdf", "active")])).unwrap();
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].name, "Website-Projekt");
-        assert_eq!(profiles[0].skills["humanizer"], "active");
+        assert_eq!(profiles[0].skills["pdf"], "active");
     }
 
     #[test]
