@@ -57,7 +57,7 @@ const appWindow = "__TAURI_INTERNALS__" in window ? getCurrentWindow() : null
 
 const SIDEBAR_NOTE: Partial<Record<View, string>> = {
   skills:
-    "Alle drei Zustände wirken erst in der nächsten Claude-Code-Session. In laufenden Chats: die Kopier-Buttons nutzen.",
+    "Aktiv und Aus übernimmt Claude Code auch in laufenden Sessions, Manuell sicher erst in der nächsten. Einen Skill, den Claude schon gelesen hat, behält es im Kontext. Dagegen hilft der Ignorieren-Prompt.",
   omniroute: "Gilt nur für Terminal-Sessions in diesem Ordner. Die Desktop-App läuft immer über Anthropic.",
   usage:
     "Prozent-Anteile sind eine Heuristik nach API-Preisverhältnis. Wie Anthropic Cache-Reads gegen das Abo-Limit gewichtet, ist lokal nicht sichtbar.",

@@ -34,8 +34,9 @@ export function UsagePanel({ report, loading, error, onRefresh }: UsagePanelProp
               : "Claude-Code-Nutzung"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Liest nur Metadaten aus ~/.claude/projects (Token-Zahlen, Modell, Tool-Namen). Kein Prompt-Text, nichts wird
-            gespeichert oder gesendet.
+            Wertet die Transcripts in ~/.claude/projects nach Token-Zahlen, Modell, Effort, Tools, Skills und Projekt
+            aus. Die Texte von Prompts, Antworten und Tool-Ausgaben werden dabei mitgelesen, aber weder gespeichert noch
+            angezeigt noch gesendet.
           </p>
         </div>
         <button

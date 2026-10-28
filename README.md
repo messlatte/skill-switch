@@ -23,11 +23,11 @@ The [latest release](https://github.com/messlatte/skill-switch/releases/latest) 
 - **Groups:** if `~/.agents/.skill-lock.json` exists, skills are grouped by the repo they were installed from, with one switch per group.
 - **Profiles:** save the current skill states under a name and apply them again later.
 - **Plugins & MCP:** read-only list of installed plugins and MCP servers. Once the usage data is loaded, it shows how often each MCP server was used and when it was last used.
-- **Usage:** reads the local transcripts in `~/.claude/projects` and shows tokens per day, project and tool. It keeps token counts, models, tool and skill names and timestamps. Prompt text is parsed with each line but not kept, shown or sent anywhere.
+- **Usage:** reads the local transcripts in `~/.claude/projects` and shows tokens per day, project and tool. It evaluates token counts, model, effort, tools, skills and project. The text of prompts, responses and tool output is read along with each line but not stored, shown or sent.
 - **Live:** running sessions with their current context size and a hint when to compact. Optional Windows notifications, and a hook that warns inside Claude Code shortly before auto-compact.
 - **OmniRoute:** sends the Claude Code traffic of selected projects through a local [OmniRoute](https://github.com/cheaper-inference/OmniRoute) proxy by writing to each project's `.claude/settings.local.json`.
 
-Claude Code reads skills and settings when a session starts, so changes apply to new sessions.
+Aktiv and Aus reach running sessions too, because Claude Code watches the skill folders ([docs](https://code.claude.com/docs/en/skills)). For Manuell, a new session is the safe bet. A skill that Claude has already read stays in that session's context. The two copy buttons next to each skill put a prompt on the clipboard that tells a running session to use or to ignore that skill.
 
 ## How it works
 
