@@ -40,7 +40,8 @@ try {
     $cacheCreate = Get-UsageField $assistantLine 'cache_creation_input_tokens'
     $context = $inputTok + $cacheRead + $cacheCreate
 
-    # Auto-compact starts at ~970k, so warn from 850k.
+    # Only a last notice before auto-compact at ~970k. Advice to compact for cost
+    # comes from the Live tab, which starts at 400k (CTX_COMPACT_NOW in live.rs).
     if ($context -lt 850000) { exit 0 }
 
     # Warn again only after another 100k tokens in the same session.

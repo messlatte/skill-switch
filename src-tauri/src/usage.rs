@@ -120,16 +120,33 @@ pub struct SessionRow {
     pub models: String,
 }
 
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    High,
+    Medium,
+    Info,
+}
+
+/// How a finding's numbers came about. Serialized in German, the UI shows it as is.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Basis {
+    #[serde(rename = "gemessen")]
+    Measured,
+    #[serde(rename = "berechnet")]
+    Computed,
+    #[serde(rename = "heuristik")]
+    Heuristic,
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Finding {
-    /// "high" | "medium" | "low" | "info"
-    pub severity: String,
+    pub severity: Severity,
     pub title: String,
     pub evidence: String,
     pub recommendation: String,
-    /// "gemessen" | "berechnet" | "heuristik"
-    pub basis: String,
+    pub basis: Basis,
 }
 
 /// One day of the 14-day list. Days without activity are included.
@@ -347,12 +364,43 @@ fn classify(root: &Path, file: &Path) -> Option<FileMeta> {
     })
 }
 
-/// Project dir names encode the cwd with separators flattened to '-'; the part
-/// after the last "Documents-" is what a human recognizes.
+/// Claude Code names a project dir after its cwd with every character other than
+/// ASCII letters and digits replaced by '-', so `C:\Users\you\code\app` becomes
+/// `C--Users-you-code-app`. The label is that name without the flattened home dir
+/// in front (`code-app`), or the whole name for a project outside the home dir.
 pub(crate) fn project_label(dir: &str) -> String {
-    dir.rsplit_once("Documents-")
-        .map(|(_, r)| r.to_string())
-        .unwrap_or_else(|| dir.to_string())
+    let home = std::env::var("USERPROFILE").ok();
+    label_without_home(dir, home.as_deref())
+}
+
+fn label_without_home(dir: &str, home: Option<&str>) -> String {
+    let Some(home) = home else {
+        return dir.to_string();
+    };
+    let prefix = flatten_path(home.trim_end_matches(['\\', '/']));
+    // Windows paths are case-insensitive, so the cwd may be cased differently
+    // from USERPROFILE.
+    let starts_with_home = dir
+        .get(..prefix.len())
+        .is_some_and(|p| !prefix.is_empty() && p.eq_ignore_ascii_case(&prefix));
+    if !starts_with_home {
+        return dir.to_string();
+    }
+    match &dir[prefix.len()..] {
+        "" => "~".to_string(),
+        // The next character must be the separator, or "C--Users-you" would also
+        // strip the front of "C--Users-young-app".
+        rest => match rest.strip_prefix('-') {
+            Some(label) if !label.is_empty() => label.to_string(),
+            _ => dir.to_string(),
+        },
+    }
+}
+
+fn flatten_path(path: &str) -> String {
+    path.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -1043,34 +1091,35 @@ fn k(n: u64) -> String {
 
 pub(crate) fn findings(r: &UsageReport) -> Vec<Finding> {
     let mut out = Vec::new();
-    let f = |severity: &str, title: &str, evidence: String, recommendation: &str, basis: &str| {
-        Finding {
-            severity: severity.to_string(),
-            title: title.to_string(),
-            evidence,
-            recommendation: recommendation.to_string(),
-            basis: basis.to_string(),
-        }
-    };
+    let f =
+        |severity: Severity, title: &str, evidence: String, recommendation: &str, basis: Basis| {
+            Finding {
+                severity,
+                title: title.to_string(),
+                evidence,
+                recommendation: recommendation.to_string(),
+                basis,
+            }
+        };
 
     let large_share = r.large_context_volume_pct as f64 / 100.0;
     if large_share >= RULE_LARGE_CTX_VOLUME_SHARE || r.avg_context >= RULE_AVG_CTX {
         out.push(f(
-            "high",
+            Severity::High,
             "Kontextgröße ist der größte Treiber",
             format!(
                 "{}% des Kontextvolumens stammen aus Requests mit >{} Kontext. Ø {} Tokens pro Request. {} von {} Sessions über 150k, nur {} haben je kompaktiert. Cache-Writes gesamt: {}.",
                 r.large_context_volume_pct, k(CTX_LARGE), k(r.avg_context), r.sessions_over_150k, r.main_sessions, r.sessions_compacted, k(r.total.cache_write)
             ),
             "Pro Aufgabe eine neue Session starten. Bei Themenwechsel /clear, bei langen Aufgaben früher /compact. Jeder Request schickt den gesamten Kontext erneut; läuft der Cache in Pausen ab, wird er komplett neu geschrieben.",
-            "gemessen",
+            Basis::Measured,
         ));
     }
     if r.long_sessions > 0 {
         let sev = if r.long_sessions as f64 / r.main_sessions.max(1) as f64 >= 0.3 {
-            "high"
+            Severity::High
         } else {
-            "medium"
+            Severity::Medium
         };
         out.push(f(
             sev,
@@ -1079,63 +1128,63 @@ pub(crate) fn findings(r: &UsageReport) -> Vec<Finding> {
                 "{} von {} Sessions liefen länger als {} Tage oder über {} Turns (längste: {} Tage, {} Turns).",
                 r.long_sessions, r.main_sessions, RULE_SESSION_DAYS as u64, RULE_SESSION_TURNS, r.longest_session_days, r.longest_session_turns
             ),
-            "Nicht per --continue über Tage weiterarbeiten. Neue Session pro Feature; Zwischenstand in PLAN.md/NOTES.md sichern statt im Kontext.",
-            "gemessen",
+            "Nicht per --continue über Tage weiterarbeiten. Neue Session pro Feature; Zwischenstand in einer Datei festhalten statt im Kontext.",
+            Basis::Measured,
         ));
     }
     let wf = r.workflow_share_pct as f64 / 100.0;
     if wf >= RULE_WORKFLOW_SHARE_MEDIUM {
         out.push(f(
-            if wf >= RULE_WORKFLOW_SHARE_HIGH { "high" } else { "medium" },
+            if wf >= RULE_WORKFLOW_SHARE_HIGH { Severity::High } else { Severity::Medium },
             "Workflows / Multi-Agent-Runden",
             format!(
                 "{} Workflow-Agents, {}% der gewichteten Nutzung. {} Sessions mit ≥{} Agents (max. {}).",
                 r.workflow_agents, r.workflow_share_pct, r.sessions_with_many_workflow_agents, RULE_WORKFLOW_AGENTS_PER_SESSION, r.max_workflow_agents_in_session
             ),
             "Workflows als Ausnahme, nicht als Standard. Mechanische Stufen mit effort 'low'; Recherche-Agents begrenzen statt bis zur Erschöpfung loopen.",
-            "berechnet",
+            Basis::Computed,
         ));
     }
     if r.xhigh_share_pct as f64 / 100.0 >= RULE_XHIGH_SHARE {
         out.push(f(
-            "medium",
+            Severity::Medium,
             "Effort xhigh ist der Standard",
             format!(
                 "{}% der gewichteten Nutzung liefen mit effort xhigh.",
                 r.xhigh_share_pct
             ),
             "Effort high als Standard; xhigh gezielt für Planung, Root-Cause und Architektur.",
-            "berechnet",
+            Basis::Computed,
         ));
     }
     if r.avg_requests_per_turn >= RULE_REQ_PER_TURN {
         out.push(f(
-            "medium",
+            Severity::Medium,
             "Viele Requests pro Turn",
             format!(
                 "Ø {} API-Requests pro User-Turn. {} fehlgeschlagene Tool-Aufrufe, {} API-Fehler.",
                 r.avg_requests_per_turn, r.tool_errors, r.api_errors
             ),
             "Unabhängige Tool-Aufrufe in einem Zug bündeln; fehlgeschlagene Befehle nicht unverändert wiederholen. Jeder Request liest den ganzen Kontext erneut.",
-            "gemessen",
+            Basis::Measured,
         ));
     }
     if r.five_hour_hits > 0 {
         out.push(f(
-            "info",
+            Severity::Info,
             "5h-Limit erreicht",
             format!("{} Mal laut Transcript-Marker (quotaLimits, five_hour, rejected).", r.five_hour_hits),
             "Eine Live-Prozentanzeige des Limits gibt es lokal nicht — nur diese Treffer und ihre Reset-Zeit.",
-            "gemessen",
+            Basis::Measured,
         ));
     }
-    if out.iter().all(|x| x.severity == "info") {
+    if out.iter().all(|x| x.severity == Severity::Info) {
         out.push(f(
-            "info",
+            Severity::Info,
             "Keine auffälligen Treiber",
             "Alle Regeln unter ihren Schwellen.".to_string(),
             "Nichts zu tun.",
-            "heuristik",
+            Basis::Heuristic,
         ));
     }
     out
@@ -1211,11 +1260,33 @@ mod tests {
 
     #[test]
     fn project_label_strips_flattened_home_prefix() {
+        let home = Some("C:\\Users\\you");
         assert_eq!(
-            project_label("C--Users-you-Documents-Claude-Skill-switch"),
-            "Claude-Skill-switch"
+            label_without_home("C--Users-you-Documents-skill-switch", home),
+            "Documents-skill-switch"
         );
-        assert_eq!(project_label("something-else"), "something-else");
+        assert_eq!(label_without_home("C--Users-you", home), "~");
+        assert_eq!(label_without_home("c--users-YOU-app", home), "app");
+        assert_eq!(label_without_home("something-else", None), "something-else");
+    }
+
+    #[test]
+    fn project_label_works_outside_documents_and_only_on_segment_boundaries() {
+        let home = Some("C:\\Users\\jane.doe\\");
+        assert_eq!(
+            label_without_home("C--Users-jane-doe-code-data-pipeline", home),
+            "code-data-pipeline"
+        );
+        assert_eq!(
+            label_without_home("C--Users-jane-doe2-app", home),
+            "C--Users-jane-doe2-app",
+            "a longer user name must not match"
+        );
+        assert_eq!(
+            label_without_home("D--work-app", home),
+            "D--work-app",
+            "outside the home dir the name stays as it is"
+        );
     }
 
     #[test]
@@ -1267,7 +1338,7 @@ mod tests {
         // Same requestId on two lines: the marker repeats per line, so both count.
         a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-01T10:00:00Z","requestId":"r1","attributionSkill":"claude-api","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-01T10:00:01Z","requestId":"r1","attributionSkill":"claude-api","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
-        a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-02T10:00:00Z","uuid":"u2","attributionSkill":"anthropic-skills:pdf","attributionMcpServer":"Claude Browser","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
+        a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-02T10:00:00Z","uuid":"u2","attributionSkill":"anthropic-skills:pdf","attributionMcpServer":"github","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         a.feed(&m2, r#"{"type":"assistant","timestamp":"2026-09-03T10:00:00Z","uuid":"u3","attributionSkill":"anthropic-skills:pdf","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         let r = a.finish();
         let pdf = r
@@ -1288,12 +1359,8 @@ mod tests {
             "two lines sharing a requestId both count — not deduped"
         );
         assert_eq!(api.sessions, 1);
-        let browser = r
-            .mcp_usage
-            .iter()
-            .find(|s| s.name == "Claude Browser")
-            .unwrap();
-        assert_eq!(browser.messages, 1);
+        let github = r.mcp_usage.iter().find(|s| s.name == "github").unwrap();
+        assert_eq!(github.messages, 1);
     }
 
     #[test]
@@ -1363,7 +1430,7 @@ mod tests {
         r.xhigh_share_pct = 10;
         r.workflow_share_pct = 0;
         let f = findings(&r);
-        assert!(f.iter().all(|x| x.severity == "info"), "{f:?}");
+        assert!(f.iter().all(|x| x.severity == Severity::Info), "{f:?}");
     }
 
     #[test]
@@ -1378,12 +1445,12 @@ mod tests {
         let sev = |t: &str| {
             f.iter()
                 .find(|x| x.title.starts_with(t))
-                .map(|x| x.severity.clone())
+                .map(|x| x.severity)
         };
-        assert_eq!(sev("Kontextgröße").as_deref(), Some("high"));
-        assert_eq!(sev("Workflows").as_deref(), Some("high"));
-        assert_eq!(sev("Effort").as_deref(), Some("medium"));
-        assert_eq!(sev("Viele Requests").as_deref(), Some("medium"));
+        assert_eq!(sev("Kontextgröße"), Some(Severity::High));
+        assert_eq!(sev("Workflows"), Some(Severity::High));
+        assert_eq!(sev("Effort"), Some(Severity::Medium));
+        assert_eq!(sev("Viele Requests"), Some(Severity::Medium));
         assert!(f
             .iter()
             .all(|x| !x.evidence.is_empty() && !x.recommendation.is_empty()));
@@ -1401,7 +1468,7 @@ mod tests {
             r.files, r.total.requests, r.avg_context, r.xhigh_share_pct, r.workflow_share_pct, r.five_hour_hits, r.main_sessions, t.elapsed()
         );
         for f in &r.findings {
-            println!("[{}] {} — {}", f.severity, f.title, f.evidence);
+            println!("[{:?}] {} — {}", f.severity, f.title, f.evidence);
         }
         println!(
             "trend current: {} req, avg ctx {}, req/turn {}, xhigh {}%, workflow {}%, 5h {} ({} Tage aktiv)",
@@ -1429,6 +1496,30 @@ mod tests {
         }
         assert!(r.total.requests > 0);
         assert_eq!(r.days.len(), 14);
+    }
+
+    #[test]
+    fn findings_serialize_to_the_strings_the_frontend_expects() {
+        let f = Finding {
+            severity: Severity::Medium,
+            title: "t".into(),
+            evidence: "e".into(),
+            recommendation: "r".into(),
+            basis: Basis::Heuristic,
+        };
+        assert_eq!(
+            serde_json::to_value(&f).unwrap(),
+            serde_json::json!({ "severity": "medium", "title": "t", "evidence": "e", "recommendation": "r", "basis": "heuristik" })
+        );
+        for (sev, s) in [(Severity::High, "high"), (Severity::Info, "info")] {
+            assert_eq!(serde_json::to_value(sev).unwrap(), s);
+        }
+        for (basis, s) in [
+            (Basis::Measured, "gemessen"),
+            (Basis::Computed, "berechnet"),
+        ] {
+            assert_eq!(serde_json::to_value(basis).unwrap(), s);
+        }
     }
 
     #[test]

@@ -12,7 +12,13 @@ type UsagePanelProps = {
 }
 
 const fmt = (n: number) =>
-  n >= 1e9 ? `${(n / 1e9).toFixed(2)} Mrd.` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n)
+  n >= 1e9
+    ? `${(n / 1e9).toFixed(2)} Mrd.`
+    : n >= 1e6
+      ? `${(n / 1e6).toFixed(1)} M`
+      : n >= 1e3
+        ? `${Math.round(n / 1e3)}k`
+        : String(n)
 
 const fmtDuration = (min: number) =>
   min >= 2880 ? `${Math.round(min / 1440)} T` : min >= 120 ? `${Math.round(min / 60)} h` : `${min} m`
@@ -28,8 +34,8 @@ export function UsagePanel({ report, loading, error, onRefresh }: UsagePanelProp
               : "Claude-Code-Nutzung"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Liest nur Metadaten aus ~/.claude/projects (Token-Zahlen, Modell, Tool-Namen). Kein Prompt-Text, nichts
-            wird gespeichert oder gesendet.
+            Liest nur Metadaten aus ~/.claude/projects (Token-Zahlen, Modell, Tool-Namen). Kein Prompt-Text, nichts wird
+            gespeichert oder gesendet.
           </p>
         </div>
         <button
@@ -51,7 +57,9 @@ export function UsagePanel({ report, loading, error, onRefresh }: UsagePanelProp
       )}
 
       {loading && !report && (
-        <p className="text-sm text-muted-foreground">Lese Transcripts — bei mehreren hundert MB dauert das ein paar Sekunden…</p>
+        <p className="text-sm text-muted-foreground">
+          Lese Transcripts — bei mehreren hundert MB dauert das ein paar Sekunden…
+        </p>
       )}
 
       {report && (
@@ -76,13 +84,11 @@ export function UsagePanel({ report, loading, error, onRefresh }: UsagePanelProp
 const SEVERITY_STYLE: Record<Finding["severity"], string> = {
   high: "border-destructive/40 bg-destructive/10 text-destructive",
   medium: "border-warning/40 bg-warning/10 text-warning",
-  low: "border-border bg-card text-foreground",
   info: "border-border bg-card text-muted-foreground",
 }
 const SEVERITY_LABEL: Record<Finding["severity"], string> = {
   high: "Hoch",
   medium: "Mittel",
-  low: "Niedrig",
   info: "Info",
 }
 
@@ -108,8 +114,8 @@ function Findings({ findings }: { findings: Finding[] }) {
                   <span className="rounded-full bg-background/60 px-2 py-0.5 text-[10px] font-medium">{f.basis}</span>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-60">
-                  gemessen = direkt aus den Transcripts · berechnet = aus gemessenen Zahlen abgeleitet, Gewichtung
-                  ist eine Heuristik · heuristik = Schwellenwert-Regel
+                  gemessen = direkt aus den Transcripts · berechnet = aus gemessenen Zahlen abgeleitet, Gewichtung ist
+                  eine Heuristik · heuristik = Schwellenwert-Regel
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -129,7 +135,8 @@ function delta(cur: number, prev: number): { text: string; className: string; Ar
     return { text: "neu", className: "text-destructive" }
   }
   const pct = ((cur - prev) / prev) * 100
-  const className = pct <= -5 ? "text-green-600 dark:text-green-400" : pct >= 5 ? "text-destructive" : "text-muted-foreground"
+  const className =
+    pct <= -5 ? "text-green-600 dark:text-green-400" : pct >= 5 ? "text-destructive" : "text-muted-foreground"
   const Arrow = pct < -0.5 ? ArrowDown : pct > 0.5 ? ArrowUp : ArrowRight
   return { text: `${Math.round(Math.abs(pct))} %`, className, Arrow }
 }
@@ -144,9 +151,19 @@ function Trend({ trend, days }: { trend: TrendData; days: DayRow[] }) {
   const prevEmpty = trend.previous.requests === 0
   const rows: { label: string; cur: number; prev: number; format: (n: number) => string }[] = [
     { label: "Ø Kontext / Request", cur: trend.current.avgContext, prev: trend.previous.avgContext, format: fmt },
-    { label: "Requests / Turn", cur: trend.current.requestsPerTurn, prev: trend.previous.requestsPerTurn, format: (n) => n.toFixed(1) },
+    {
+      label: "Requests / Turn",
+      cur: trend.current.requestsPerTurn,
+      prev: trend.previous.requestsPerTurn,
+      format: (n) => n.toFixed(1),
+    },
     { label: "Effort xhigh", cur: trend.current.xhighPct, prev: trend.previous.xhighPct, format: (n) => `${n} %` },
-    { label: "Workflow-Anteil", cur: trend.current.workflowPct, prev: trend.previous.workflowPct, format: (n) => `${n} %` },
+    {
+      label: "Workflow-Anteil",
+      cur: trend.current.workflowPct,
+      prev: trend.previous.workflowPct,
+      format: (n) => `${n} %`,
+    },
     { label: "5h-Limit-Treffer", cur: trend.current.fiveHourHits, prev: trend.previous.fiveHourHits, format: String },
     { label: "Requests", cur: trend.current.requests, prev: trend.previous.requests, format: fmt },
   ]
@@ -165,8 +182,15 @@ function Trend({ trend, days }: { trend: TrendData; days: DayRow[] }) {
               <Fragment key={row.label}>
                 <span className="text-muted-foreground">{row.label}</span>
                 <span className="text-right tabular-nums font-medium">{curEmpty ? "–" : row.format(row.cur)}</span>
-                <span className="text-right tabular-nums text-muted-foreground">{prevEmpty ? "–" : row.format(row.prev)}</span>
-                <span className={cn("flex items-center justify-end gap-0.5 tabular-nums", d?.className ?? "text-muted-foreground")}>
+                <span className="text-right tabular-nums text-muted-foreground">
+                  {prevEmpty ? "–" : row.format(row.prev)}
+                </span>
+                <span
+                  className={cn(
+                    "flex items-center justify-end gap-0.5 tabular-nums",
+                    d?.className ?? "text-muted-foreground"
+                  )}
+                >
                   {d ? (
                     <>
                       {d.Arrow && <d.Arrow className="size-3" />}
@@ -201,14 +225,46 @@ function Trend({ trend, days }: { trend: TrendData; days: DayRow[] }) {
 
 function KeyNumbers({ r }: { r: UsageReport }) {
   const tiles: { label: string; value: string; hint: string }[] = [
-    { label: "Ø Kontext / Request", value: fmt(r.avgContext), hint: "Input + Cache-Write + Cache-Read pro API-Request. Jeder Request schickt den ganzen Kontext erneut." },
-    { label: "Kontextvolumen aus >200k", value: `${r.largeContextVolumePct} %`, hint: "Anteil aller gelesenen Kontext-Tokens, die aus Requests mit mehr als 200k Kontext stammen." },
-    { label: "Effort xhigh", value: `${r.xhighSharePct} %`, hint: "Anteil der gewichteten Nutzung mit effort xhigh (Heuristik-Gewichtung)." },
-    { label: "Workflow-Agents", value: `${r.workflowSharePct} %`, hint: `${r.workflowAgents} Workflow-Agent-Transcripts; Anteil an der gewichteten Nutzung.` },
-    { label: "Ø Requests / Turn", value: String(r.avgRequestsPerTurn), hint: "API-Requests pro User-Nachricht in Hauptsessions. Tool-Aufrufe und Retries zählen mit." },
-    { label: "5h-Limit erreicht", value: String(r.fiveHourHits), hint: "Gespeicherte quotaLimits-Marker mit rateLimitType five_hour und status rejected." },
-    { label: "Sessions > 150k", value: `${r.sessionsOver150k} / ${r.mainSessions}`, hint: `${r.sessionsCompacted} Sessions haben je kompaktiert (${r.compactions} Compact-Events).` },
-    { label: "Fehler", value: `${r.toolErrors} / ${r.apiErrors}`, hint: "Fehlgeschlagene Tool-Aufrufe / API-Fehlermeldungen." },
+    {
+      label: "Ø Kontext / Request",
+      value: fmt(r.avgContext),
+      hint: "Input + Cache-Write + Cache-Read pro API-Request. Jeder Request schickt den ganzen Kontext erneut.",
+    },
+    {
+      label: "Kontextvolumen aus >200k",
+      value: `${r.largeContextVolumePct} %`,
+      hint: "Anteil aller gelesenen Kontext-Tokens, die aus Requests mit mehr als 200k Kontext stammen.",
+    },
+    {
+      label: "Effort xhigh",
+      value: `${r.xhighSharePct} %`,
+      hint: "Anteil der gewichteten Nutzung mit effort xhigh (Heuristik-Gewichtung).",
+    },
+    {
+      label: "Workflow-Agents",
+      value: `${r.workflowSharePct} %`,
+      hint: `${r.workflowAgents} Workflow-Agent-Transcripts; Anteil an der gewichteten Nutzung.`,
+    },
+    {
+      label: "Ø Requests / Turn",
+      value: String(r.avgRequestsPerTurn),
+      hint: "API-Requests pro User-Nachricht in Hauptsessions. Tool-Aufrufe und Retries zählen mit.",
+    },
+    {
+      label: "5h-Limit erreicht",
+      value: String(r.fiveHourHits),
+      hint: "Gespeicherte quotaLimits-Marker mit rateLimitType five_hour und status rejected.",
+    },
+    {
+      label: "Sessions > 150k",
+      value: `${r.sessionsOver150k} / ${r.mainSessions}`,
+      hint: `${r.sessionsCompacted} Sessions haben je kompaktiert (${r.compactions} Compact-Events).`,
+    },
+    {
+      label: "Fehler",
+      value: `${r.toolErrors} / ${r.apiErrors}`,
+      hint: "Fehlgeschlagene Tool-Aufrufe / API-Fehlermeldungen.",
+    },
   ]
   return (
     <section>
@@ -352,7 +408,5 @@ function Tools({ r }: { r: UsageReport }) {
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{children}</h2>
-  )
+  return <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{children}</h2>
 }

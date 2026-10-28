@@ -15,15 +15,16 @@ const germanDate = (iso: string) => {
   return `${d}.${m}.${y}`
 }
 
-const usageDetail = (u: AttributionUsage) => `${u.messages} Nachrichten · zuletzt ${u.lastDay ? germanDate(u.lastDay) : "?"}`
+const usageDetail = (u: AttributionUsage) =>
+  `${u.messages} Nachrichten · zuletzt ${u.lastDay ? germanDate(u.lastDay) : "?"}`
 
 export function ConfigPanel({ env, loading, mcpUsage, usageLoading, onLoadUsage }: ConfigPanelProps) {
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
       <div className="flex items-start justify-between gap-3 rounded-[10px] border border-border bg-card px-4 py-3">
         <p className="text-xs text-muted-foreground">
-          Plugins/MCPs schaltest du in Claude Code selbst (/mcp bzw. Plugin-Manager). Plugin-eigene
-          Skills erscheinen hier nicht – sie schalten mit ihrem Plugin.
+          Plugins/MCPs schaltest du in Claude Code selbst (/mcp bzw. Plugin-Manager). Plugin-eigene Skills erscheinen
+          hier nicht – sie schalten mit ihrem Plugin.
         </p>
         {!mcpUsage && (
           <button
@@ -103,9 +104,7 @@ function Group({
       </h2>
       {hint && <p className="mb-2 px-1 text-[11px] text-muted-foreground">{hint}</p>}
       {items.length === 0 ? (
-        <p className="rounded-[10px] border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-          {empty}
-        </p>
+        <p className="rounded-[10px] border border-border bg-card px-4 py-3 text-sm text-muted-foreground">{empty}</p>
       ) : (
         <div className="overflow-hidden rounded-[10px] border border-border bg-card">
           {items.map((item, i) => (
@@ -114,9 +113,7 @@ function Group({
               <div className="flex items-center gap-3 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{item.name}</p>
-                  {item.detail && (
-                    <p className="truncate text-xs text-muted-foreground">{item.detail}</p>
-                  )}
+                  {item.detail && <p className="truncate text-xs text-muted-foreground">{item.detail}</p>}
                 </div>
                 {item.badge && (
                   <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">

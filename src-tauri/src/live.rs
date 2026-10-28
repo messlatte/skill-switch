@@ -18,6 +18,9 @@ use crate::usage::{parse_ts, project_label};
 // Rules
 const ACTIVE_SECS: i64 = 10 * 60; // written within 10 min = active
 const SHOW_SECS: i64 = 6 * 60 * 60; // listed (as idle) up to 6 h
+/// Cost advice: every request re-reads the whole context, so compacting pays off long
+/// before the window is full. hooks/context-hook.ps1 has another job: a last notice in
+/// the chat before auto-compact, so it starts at 850k.
 const CTX_COMPACT_NOW: u64 = 400_000;
 const CTX_COMPACT_SOON: u64 = 200_000;
 const RULE_TURN_REQUESTS: u64 = 15;
@@ -26,11 +29,19 @@ const RULE_AGE_DAYS: f64 = 3.0;
 const RULE_TURNS: u64 = 100;
 const MAX_CHUNK: u64 = 64 * 1024 * 1024; // never read more than this per poll
 
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AdviceLevel {
+    High,
+    Medium,
+    Ok,
+    Info,
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Advice {
-    /// "high" | "medium" | "ok" | "info"
-    pub level: String,
+    pub level: AdviceLevel,
     pub text: String,
     /// Ready-to-paste slash command, if one applies.
     pub command: Option<String>,
@@ -271,8 +282,8 @@ impl Cursor {
 
 pub(crate) fn advice(s: &LiveSession) -> Vec<Advice> {
     let mut out = Vec::new();
-    let a = |level: &str, text: String, command: Option<&str>| Advice {
-        level: level.to_string(),
+    let a = |level: AdviceLevel, text: String, command: Option<&str>| Advice {
+        level,
         text,
         command: command.map(str::to_string),
     };
@@ -281,13 +292,13 @@ pub(crate) fn advice(s: &LiveSession) -> Vec<Advice> {
     // Context advice is always shown, even when it's fine.
     if s.context >= CTX_COMPACT_NOW {
         out.push(a(
-            "high",
+            AdviceLevel::High,
             format!("Kontext {} — jetzt kompaktieren oder die nächste Aufgabe in einer neuen Session starten. Jeder Request liest das alles erneut.", k(s.context)),
             Some("/compact focus on "),
         ));
     } else if s.context >= CTX_COMPACT_SOON {
         out.push(a(
-            "medium",
+            AdviceLevel::Medium,
             format!(
                 "Kontext {} — vor der nächsten größeren Aufgabe kompaktieren.",
                 k(s.context)
@@ -296,7 +307,7 @@ pub(crate) fn advice(s: &LiveSession) -> Vec<Advice> {
         ));
     } else {
         out.push(a(
-            "ok",
+            AdviceLevel::Ok,
             format!(
                 "Kontext {} — unkritisch. Bei Themenwechsel trotzdem /clear.",
                 k(s.context)
@@ -307,14 +318,14 @@ pub(crate) fn advice(s: &LiveSession) -> Vec<Advice> {
 
     if let Some(secs) = s.limit_reset_in_secs {
         out.push(a(
-            "info",
+            AdviceLevel::Info,
             format!("5h-Limit erreicht — Reset in {} min.", (secs / 60).max(1)),
             None,
         ));
     }
     if s.turn_requests >= RULE_TURN_REQUESTS || s.turn_errors >= RULE_TURN_ERRORS {
         out.push(a(
-            "medium",
+            AdviceLevel::Medium,
             format!(
                 "Aktueller Turn: {} Requests, {} fehlgeschlagene Tool-Aufrufe — sieht nach einer Schleife aus. Ansatz ändern statt wiederholen lassen.",
                 s.turn_requests, s.turn_errors
@@ -325,21 +336,21 @@ pub(crate) fn advice(s: &LiveSession) -> Vec<Advice> {
     let days = s.age_secs as f64 / 86_400.0;
     if days >= RULE_AGE_DAYS || s.turns >= RULE_TURNS {
         out.push(a(
-            "medium",
+            AdviceLevel::Medium,
             format!("Session ist {:.0} Tage alt ({} Turns). Neue Session pro Aufgabe; Zwischenstand in eine Datei sichern.", days, s.turns),
             None,
         ));
     }
     if s.effort.as_deref() == Some("xhigh") {
         out.push(a(
-            "info",
+            AdviceLevel::Info,
             "Effort xhigh aktiv — für Implementierung reicht meist high.".to_string(),
             None,
         ));
     }
     if s.agents_active > 0 {
         out.push(a(
-            "info",
+            AdviceLevel::Info,
             format!(
                 "{} Agent(s) schreiben gerade — jeder mit eigenem Kontext.",
                 s.agents_active
@@ -571,14 +582,26 @@ mod tests {
 
     #[test]
     fn compact_advice_is_always_present_and_scales_with_context() {
-        let lvl = |ctx: u64| advice(&sess(ctx))[0].level.clone();
-        assert_eq!(lvl(50_000), "ok");
-        assert_eq!(lvl(250_000), "medium");
-        assert_eq!(lvl(700_000), "high");
+        let lvl = |ctx: u64| advice(&sess(ctx))[0].level;
+        assert_eq!(lvl(50_000), AdviceLevel::Ok);
+        assert_eq!(lvl(250_000), AdviceLevel::Medium);
+        assert_eq!(lvl(700_000), AdviceLevel::High);
         assert_eq!(
             advice(&sess(700_000))[0].command.as_deref(),
             Some("/compact focus on ")
         );
+    }
+
+    #[test]
+    fn advice_levels_serialize_to_the_strings_the_frontend_expects() {
+        for (level, s) in [
+            (AdviceLevel::High, "high"),
+            (AdviceLevel::Medium, "medium"),
+            (AdviceLevel::Ok, "ok"),
+            (AdviceLevel::Info, "info"),
+        ] {
+            assert_eq!(serde_json::to_value(level).unwrap(), s);
+        }
     }
 
     #[test]
