@@ -2,46 +2,85 @@
 
 [![CI](https://github.com/messlatte/skill-switch/actions/workflows/ci.yml/badge.svg)](https://github.com/messlatte/skill-switch/actions/workflows/ci.yml)
 
-Windows desktop app for turning Claude Code skills on and off without moving folders by hand. Built with Tauri 2, React and Rust. The UI is in German.
+Windows desktop app for turning Claude Code skills on and off. It also shows where the usage limit goes and how full the context of running sessions is. Built with Tauri 2, Rust and React. The UI is in German.
+
+![Skills tab with four skills: two active, one set to manual, one off](docs/screenshot.png)
+
+## Why
+
+Claude Code puts the name and description of every installed skill into each new session. With a few dozen skills installed, I wanted to switch some of them off for a while without renaming folders or editing `settings.json` by hand. The usage and live tabs came later, when I wanted to know which sessions use up the limit.
+
+## Download
+
+The [latest release](https://github.com/messlatte/skill-switch/releases/latest) has an NSIS installer (about 3 MB) and an MSI. Both are unsigned, so Windows SmartScreen shows "Unknown publisher"; "More info" and then "Run anyway" starts the installer. The app needs the WebView2 runtime, which Windows 11 ships with.
 
 ## Features
 
-- **Skills:** lists the skills in `~/.claude/skills` and `~/.claude/skills-disabled` with name and description from `SKILL.md`. Each skill has three states:
+- **Skills:** lists the skills in `~/.claude/skills` and `~/.claude/skills-disabled` with the description from `SKILL.md`. Each skill has three states:
   - _Aktiv_: Claude sees the skill and can use it on its own.
-  - _Manuell_: only callable via `/name`. The app sets `skillOverrides` in `~/.claude/settings.json` and leaves the rest of the file as it is.
-  - _Aus_: moves the folder to `skills-disabled`. Nothing is deleted, and the move stops if a folder with the same name is already there.
-- **Groups:** if `~/.agents/.skill-lock.json` exists, skills are grouped by the repo they were installed from, with a link to the repo and one switch for the whole group.
+  - _Manuell_: only callable via `/name`. The app sets `skillOverrides` in `~/.claude/settings.json`.
+  - _Aus_: moves the folder to `skills-disabled`. Nothing is deleted.
+- **Groups:** if `~/.agents/.skill-lock.json` exists, skills are grouped by the repo they were installed from, with one switch per group.
 - **Profiles:** save the current skill states under a name and apply them again later.
-- **Usage:** reads the local transcripts in `~/.claude/projects` and shows where the usage limit goes (context size, long sessions, effort, limit hits). Only metadata is read, not the prompts.
+- **Plugins & MCP:** read-only list of installed plugins and MCP servers. Once the usage data is loaded, it shows how often each MCP server was used and when it was last used.
+- **Usage:** reads the local transcripts in `~/.claude/projects` and shows tokens per day, project and tool. It keeps token counts, models, tool and skill names and timestamps. Prompt text is parsed with each line but not kept, shown or sent anywhere.
 - **Live:** running sessions with their current context size and a hint when to compact. Optional Windows notifications, and a hook that warns inside Claude Code shortly before auto-compact.
-- **OmniRoute:** routes single CLI projects through a local [OmniRoute](https://github.com/diegosouzapw/OmniRoute) proxy by writing to the project's `.claude/settings.local.json`. Never global, and Claude Desktop is not affected.
-- Read-only list of installed plugins and MCP servers.
+- **OmniRoute:** sends the Claude Code traffic of selected projects through a local [OmniRoute](https://github.com/cheaper-inference/OmniRoute) proxy by writing to each project's `.claude/settings.local.json`.
 
 Claude Code reads skills and settings when a session starts, so changes apply to new sessions.
 
-All file access happens in the Rust backend. The frontend only calls the exposed Tauri commands.
+## How it works
 
-## Requirements
+The Rust side in `src-tauri/src` does all file access and exposes a fixed set of commands to the frontend:
 
-- Windows 10 or 11
-- Node.js 20+
-- Rust with the `stable-x86_64-pc-windows-msvc` toolchain
-- Visual Studio Build Tools with "Desktop development with C++"
+- `lib.rs`: skill list, the three states, `settings.json`
+- `usage.rs`: parses the JSONL transcripts and aggregates tokens per request, day, project and tool
+- `live.rs`: polls the transcripts of active sessions
+- `omniroute.rs`: per-project routing and backups
+- `profiles.rs`, `hook.rs`: saved profiles and the context-warning hook
+
+The React frontend in `src` has one component per tab. `src/lib/api.ts` wraps the Tauri commands. The frontend itself has no file system access. Beyond Tauri's core defaults it may only close the window, send notifications and open `https://` links.
+
+## Design decisions
+
+- **Tauri and Rust.** File access stays in Rust behind named commands. The UI runs in the WebView2 runtime that ships with Windows, so the installer does not bundle a browser.
+- **"Aus" moves the folder.** Claude Code then does not see the skill at all. The move refuses to run if a folder with the same name already exists in the target, so nothing gets overwritten.
+- **Only `skillOverrides` is written.** Every other key in `settings.json` stays as it is. Writes are serialized through a mutex, because two quick toggles would otherwise race. They go to a temporary file first, which is then renamed over the original, so a crash cannot leave a half-written file.
+- **Linked skills count as skills.** Skills installed by a skills manager are often directory junctions. On Windows, `file_type()` reports a junction as neither file nor directory, so the app resolves the link explicitly; otherwise linked skills would drop out of the list.
+- **Usage is deduplicated by `requestId`.** Claude Code writes one API request as several transcript lines with the same `requestId`, so counting lines would multiply the tokens. Tool calls are deduplicated by their id. `requests_are_deduplicated_by_request_id_and_turns_counted` in `usage.rs` tests this.
+- **The live tab reads only what is new.** Each poll seeks to where the last one stopped, reads the appended bytes and consumes only complete lines. A line that is still being written waits for the next poll, and a file that got shorter resets the cursor.
+- **Backups outside the project.** Before the app changes a project's `settings.local.json`, it keeps the last three versions in its own app data folder. That file can hold the proxy's API key, so a backup must never land inside the project, where Git could pick it up.
+
+## Limitations
+
+- Windows only. The code uses Windows file attributes and process flags.
+- The usage and live tabs read Claude Code's transcript format, which is not documented. A format change can break them.
 
 ## Development
+
+Requirements: Windows 10 or 11, Node.js 20.19 or later, Rust stable (`x86_64-pc-windows-msvc`) and the Visual Studio Build Tools with "Desktop development with C++".
 
 ```bash
 npm install
 npm run tauri dev
 ```
 
-## Build
+`npm run dev` starts only the frontend in the browser, with sample data from `src/lib/mock.ts` instead of the Rust backend.
 
 ```bash
 npm run tauri build
 ```
 
-The MSI and NSIS installers end up in `src-tauri/target/release/bundle/`.
+builds the installers into `src-tauri/target/release/bundle/`.
+
+## Tests
+
+```bash
+cd src-tauri
+cargo test
+```
+
+The unit tests sit next to the code in each Rust module. CI runs `cargo fmt --check`, `cargo clippy` with warnings as errors, `cargo test`, the frontend build, `oxlint` and Prettier on pushes to `main` and on pull requests. Pushing a `v*` tag builds the installers and attaches them to a draft release.
 
 ## License
 
