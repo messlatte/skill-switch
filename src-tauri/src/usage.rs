@@ -1110,7 +1110,7 @@ pub(crate) fn findings(r: &UsageReport) -> Vec<Finding> {
                 "{} von {} Sessions liefen länger als {} Tage oder über {} Turns (längste: {} Tage, {} Turns).",
                 r.long_sessions, r.main_sessions, RULE_SESSION_DAYS as u64, RULE_SESSION_TURNS, r.longest_session_days, r.longest_session_turns
             ),
-            "Nicht per --continue über Tage weiterarbeiten. Neue Session pro Feature; Zwischenstand in PLAN.md/NOTES.md sichern statt im Kontext.",
+            "Nicht per --continue über Tage weiterarbeiten. Neue Session pro Feature; Zwischenstand in einer Datei festhalten statt im Kontext.",
             "gemessen",
         ));
     }
