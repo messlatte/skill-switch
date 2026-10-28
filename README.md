@@ -1,5 +1,7 @@
 # Skill Switch
 
+[![CI](https://github.com/messlatte/skill-switch/actions/workflows/ci.yml/badge.svg)](https://github.com/messlatte/skill-switch/actions/workflows/ci.yml)
+
 Windows desktop app for turning Claude Code skills on and off without moving folders by hand. Built with Tauri 2, React and Rust. The UI is in German.
 
 ## Features
@@ -35,10 +37,7 @@ npm run tauri dev
 
 ## Build
 
-The repo contains no app icons. Generate them from a 1024×1024 PNG first:
-
 ```bash
-npx tauri icon path/to/icon.png
 npm run tauri build
 ```
 

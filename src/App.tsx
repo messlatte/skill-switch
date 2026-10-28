@@ -98,7 +98,7 @@ function App() {
 
   useEffect(() => {
     if (view === "usage" && !usage && !usageLoading && !usageError) refreshUsage()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [view])
 
   // Polls even when the Live tab is closed, so notifications still fire.

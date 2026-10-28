@@ -65,7 +65,11 @@ fn write_config(app: &AppHandle, cfg: &ProfilesConfig) -> Result<(), String> {
 
 /// A profile with the same name (case-insensitive) is replaced in place,
 /// a new one is appended.
-fn upsert(mut profiles: Vec<Profile>, name: &str, skills: BTreeMap<String, String>) -> Result<Vec<Profile>, String> {
+fn upsert(
+    mut profiles: Vec<Profile>,
+    name: &str,
+    skills: BTreeMap<String, String>,
+) -> Result<Vec<Profile>, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("Profilname darf nicht leer sein.".to_string());
@@ -73,12 +77,23 @@ fn upsert(mut profiles: Vec<Profile>, name: &str, skills: BTreeMap<String, Strin
     if skills.is_empty() {
         return Err("Profil enthält keine Skills.".to_string());
     }
-    if let Some((skill, state)) = skills.iter().find(|(_, v)| !VALID_STATES.contains(&v.as_str())) {
-        return Err(format!("Ungültiger Zustand \"{state}\" für Skill \"{skill}\"."));
+    if let Some((skill, state)) = skills
+        .iter()
+        .find(|(_, v)| !VALID_STATES.contains(&v.as_str()))
+    {
+        return Err(format!(
+            "Ungültiger Zustand \"{state}\" für Skill \"{skill}\"."
+        ));
     }
 
-    let profile = Profile { name: trimmed.to_string(), skills };
-    match profiles.iter().position(|p| p.name.eq_ignore_ascii_case(trimmed)) {
+    let profile = Profile {
+        name: trimmed.to_string(),
+        skills,
+    };
+    match profiles
+        .iter()
+        .position(|p| p.name.eq_ignore_ascii_case(trimmed))
+    {
         Some(pos) => profiles[pos] = profile,
         None => profiles.push(profile),
     }
@@ -102,20 +117,38 @@ pub fn list_profiles(app: AppHandle) -> Result<Vec<Profile>, String> {
 }
 
 #[tauri::command]
-pub fn save_profile(app: AppHandle, name: String, skills: HashMap<String, String>) -> Result<Vec<Profile>, String> {
-    let _guard = PROFILES_LOCK.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+pub fn save_profile(
+    app: AppHandle,
+    name: String,
+    skills: HashMap<String, String>,
+) -> Result<Vec<Profile>, String> {
+    let _guard = PROFILES_LOCK
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
     let cfg = read_config(&app)?;
     let profiles = upsert(cfg.profiles, &name, skills.into_iter().collect())?;
-    write_config(&app, &ProfilesConfig { profiles: profiles.clone() })?;
+    write_config(
+        &app,
+        &ProfilesConfig {
+            profiles: profiles.clone(),
+        },
+    )?;
     Ok(profiles)
 }
 
 #[tauri::command]
 pub fn delete_profile(app: AppHandle, name: String) -> Result<Vec<Profile>, String> {
-    let _guard = PROFILES_LOCK.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let _guard = PROFILES_LOCK
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
     let cfg = read_config(&app)?;
     let profiles = remove(cfg.profiles, &name);
-    write_config(&app, &ProfilesConfig { profiles: profiles.clone() })?;
+    write_config(
+        &app,
+        &ProfilesConfig {
+            profiles: profiles.clone(),
+        },
+    )?;
     Ok(profiles)
 }
 
@@ -124,12 +157,20 @@ mod tests {
     use super::*;
 
     fn skills(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
     fn upsert_adds_new_profile() {
-        let profiles = upsert(Vec::new(), "Website-Projekt", skills(&[("humanizer", "active")])).unwrap();
+        let profiles = upsert(
+            Vec::new(),
+            "Website-Projekt",
+            skills(&[("humanizer", "active")]),
+        )
+        .unwrap();
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].name, "Website-Projekt");
         assert_eq!(profiles[0].skills["humanizer"], "active");
@@ -162,8 +203,15 @@ mod tests {
         let profiles = upsert(profiles, "Minimal", skills(&[("b", "disabled")])).unwrap();
         let profiles = upsert(profiles, "WEBSITE-projekt", skills(&[("a", "manual")])).unwrap();
 
-        assert_eq!(profiles.len(), 2, "same name (any case) must replace, not add a third profile");
-        assert_eq!(profiles[0].name, "WEBSITE-projekt", "position is kept, only the entry is replaced");
+        assert_eq!(
+            profiles.len(),
+            2,
+            "same name (any case) must replace, not add a third profile"
+        );
+        assert_eq!(
+            profiles[0].name, "WEBSITE-projekt",
+            "position is kept, only the entry is replaced"
+        );
         assert_eq!(profiles[0].skills["a"], "manual");
         assert_eq!(profiles[1].name, "Minimal");
     }
@@ -176,6 +224,10 @@ mod tests {
 
         let profiles = upsert(Vec::new(), "Website-Projekt", skills(&[("a", "active")])).unwrap();
         let profiles = remove(profiles, "Nicht vorhanden");
-        assert_eq!(profiles.len(), 1, "removing a name that isn't there must be a no-op");
+        assert_eq!(
+            profiles.len(),
+            1,
+            "removing a name that isn't there must be a no-op"
+        );
     }
 }

@@ -428,7 +428,12 @@ struct AttribUsage {
     last_day: Option<String>,
 }
 
-fn record_attribution(map: &mut HashMap<String, AttribUsage>, name: String, session: &str, day: Option<String>) {
+fn record_attribution(
+    map: &mut HashMap<String, AttribUsage>,
+    name: String,
+    session: &str,
+    day: Option<String>,
+) {
     let e = map.entry(name).or_default();
     e.messages += 1;
     e.sessions.insert(session.to_string());
@@ -526,7 +531,8 @@ impl Aggregator {
             if q.rate_limit_type == "five_hour" && q.status == "rejected" {
                 self.five_hour_hits += 1;
                 if let Some(r) = q.resets_at {
-                    self.last_five_hour_reset = Some(self.last_five_hour_reset.map_or(r, |x| x.max(r)));
+                    self.last_five_hour_reset =
+                        Some(self.last_five_hour_reset.map_or(r, |x| x.max(r)));
                 }
                 if let Some(day) = day_of(&line.timestamp) {
                     self.days.entry(day).or_default().five_hour_hits += 1;
@@ -546,7 +552,12 @@ impl Aggregator {
         if line.attribution_skill.is_some() || line.attribution_mcp_server.is_some() {
             let day = day_of(&line.timestamp);
             if let Some(raw) = &line.attribution_skill {
-                record_attribution(&mut self.skill_usage, normalize_skill_name(raw), &meta.session, day.clone());
+                record_attribution(
+                    &mut self.skill_usage,
+                    normalize_skill_name(raw),
+                    &meta.session,
+                    day.clone(),
+                );
             }
             if let Some(raw) = &line.attribution_mcp_server {
                 record_attribution(&mut self.mcp_usage, raw.clone(), &meta.session, day);
@@ -579,7 +590,11 @@ impl Aggregator {
                             _ => {}
                         }
                     }
-                    if meta.kind == Kind::Main && has_text && !has_result && line.prompt_id.is_some() {
+                    if meta.kind == Kind::Main
+                        && has_text
+                        && !has_result
+                        && line.prompt_id.is_some()
+                    {
                         sess.turns += 1;
                         if let Some(day) = day_of(&line.timestamp) {
                             self.days.entry(day).or_default().turns += 1;
@@ -606,7 +621,11 @@ impl Aggregator {
                     continue;
                 };
                 if self.seen_tool_use.insert(id.to_string()) {
-                    let tbl = if meta.kind == Kind::Main { &mut self.tools_main } else { &mut self.tools_agents };
+                    let tbl = if meta.kind == Kind::Main {
+                        &mut self.tools_main
+                    } else {
+                        &mut self.tools_agents
+                    };
                     *tbl.entry(name.to_string()).or_insert(0) += 1;
                 }
             }
@@ -646,7 +665,13 @@ impl Aggregator {
             by_kind.entry(r.kind).or_default().add(&r.usage);
             by_model.entry(r.model.clone()).or_default().add(&r.usage);
             by_effort.entry(r.effort.clone()).or_default().add(&r.usage);
-            let ctx = Tokens { input: r.usage.input_tokens, cache_write: r.usage.cache_creation_input_tokens, cache_read: r.usage.cache_read_input_tokens, ..Default::default() }.context();
+            let ctx = Tokens {
+                input: r.usage.input_tokens,
+                cache_write: r.usage.cache_creation_input_tokens,
+                cache_read: r.usage.cache_read_input_tokens,
+                ..Default::default()
+            }
+            .context();
             let i = match ctx {
                 c if c < 50_000 => 0,
                 c if c < 100_000 => 1,
@@ -657,7 +682,11 @@ impl Aggregator {
             bucket_req[i] += 1;
             bucket_vol[i] += ctx;
             if let Some(s) = self.sessions.get_mut(&r.session) {
-                if r.kind == Kind::Main { s.main.add(&r.usage) } else { s.agents.add(&r.usage) }
+                if r.kind == Kind::Main {
+                    s.main.add(&r.usage)
+                } else {
+                    s.agents.add(&r.usage)
+                }
                 s.max_context = s.max_context.max(ctx);
                 *s.models.entry(r.model.clone()).or_insert(0) += 1;
             }
@@ -676,25 +705,48 @@ impl Aggregator {
         }
 
         let total_w = total.weighted().max(1.0);
-        let pct = |part: f64, whole: f64| -> u8 { if whole <= 0.0 { 0 } else { ((100.0 * part / whole).round() as i64).clamp(0, 100) as u8 } };
+        let pct = |part: f64, whole: f64| -> u8 {
+            if whole <= 0.0 {
+                0
+            } else {
+                ((100.0 * part / whole).round() as i64).clamp(0, 100) as u8
+            }
+        };
         let named = |m: HashMap<String, Tokens>| -> Vec<Named> {
             let mut v: Vec<Named> = m
                 .into_iter()
-                .map(|(name, tokens)| Named { share_pct: pct(tokens.weighted(), total_w), name, tokens })
+                .map(|(name, tokens)| Named {
+                    share_pct: pct(tokens.weighted(), total_w),
+                    name,
+                    tokens,
+                })
                 .collect();
-            v.sort_by(|a, b| b.tokens.weighted().partial_cmp(&a.tokens.weighted()).unwrap_or(std::cmp::Ordering::Equal));
+            v.sort_by(|a, b| {
+                b.tokens
+                    .weighted()
+                    .partial_cmp(&a.tokens.weighted())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             v
         };
         let by_kind_v: Vec<Named> = [Kind::Main, Kind::Subagent, Kind::Workflow]
             .into_iter()
             .map(|k| {
                 let tokens = by_kind.get(&k).copied().unwrap_or_default();
-                Named { name: k.label().to_string(), share_pct: pct(tokens.weighted(), total_w), tokens }
+                Named {
+                    name: k.label().to_string(),
+                    share_pct: pct(tokens.weighted(), total_w),
+                    tokens,
+                }
             })
             .collect();
         let workflow_share_pct = by_kind_v[2].share_pct;
         let by_effort_v = named(by_effort);
-        let xhigh_share_pct = by_effort_v.iter().find(|n| n.name == "xhigh").map(|n| n.share_pct).unwrap_or(0);
+        let xhigh_share_pct = by_effort_v
+            .iter()
+            .find(|n| n.name == "xhigh")
+            .map(|n| n.share_pct)
+            .unwrap_or(0);
 
         let total_ctx = total.context().max(1);
         let context_buckets: Vec<Bucket> = (0..5)
@@ -708,8 +760,14 @@ impl Aggregator {
             .collect();
 
         let top_tools = |m: &HashMap<String, u64>| -> Vec<ToolCount> {
-            let mut v: Vec<ToolCount> = m.iter().map(|(n, c)| ToolCount { name: n.clone(), count: *c }).collect();
-            v.sort_by(|a, b| b.count.cmp(&a.count));
+            let mut v: Vec<ToolCount> = m
+                .iter()
+                .map(|(n, c)| ToolCount {
+                    name: n.clone(),
+                    count: *c,
+                })
+                .collect();
+            v.sort_by_key(|a| std::cmp::Reverse(a.count));
             v.truncate(TOP_TOOLS);
             v
         };
@@ -746,7 +804,10 @@ impl Aggregator {
             if s.compactions > 0 {
                 sessions_compacted += 1;
             }
-            let secs = match (s.first, s.last) { (Some(f), Some(l)) if l > f => l - f, _ => 0 };
+            let secs = match (s.first, s.last) {
+                (Some(f), Some(l)) if l > f => l - f,
+                _ => 0,
+            };
             let days = secs as f64 / 86_400.0;
             if days >= RULE_SESSION_DAYS || s.turns >= RULE_SESSION_TURNS {
                 long_sessions += 1;
@@ -760,7 +821,7 @@ impl Aggregator {
             all.merge(&s.agents);
             let w = all.weighted();
             let mut models: Vec<(String, u64)> = s.models.into_iter().collect();
-            models.sort_by(|a, b| b.1.cmp(&a.1));
+            models.sort_by_key(|a| std::cmp::Reverse(a.1));
             let models = models
                 .iter()
                 .map(|(m, n)| format!("{}:{n}", m.trim_start_matches("claude-")))
@@ -771,11 +832,18 @@ impl Aggregator {
                 SessionRow {
                     id: id.chars().take(8).collect(),
                     project: s.project,
-                    start_day: s.first.map(|f| day_from_epoch(f)).unwrap_or_else(|| "?".to_string()),
+                    start_day: s
+                        .first
+                        .map(day_from_epoch)
+                        .unwrap_or_else(|| "?".to_string()),
                     duration_min: (secs / 60) as u64,
                     turns: s.turns,
                     requests: all.requests,
-                    requests_per_turn: if s.turns > 0 { (s.main.requests as f64 / s.turns as f64 * 10.0).round() / 10.0 } else { 0.0 },
+                    requests_per_turn: if s.turns > 0 {
+                        (s.main.requests as f64 / s.turns as f64 * 10.0).round() / 10.0
+                    } else {
+                        0.0
+                    },
                     max_context: s.max_context,
                     subagents: s.subagents,
                     workflow_agents: s.workflow_agents,
@@ -788,7 +856,11 @@ impl Aggregator {
             ));
         }
         rows.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        let sessions: Vec<SessionRow> = rows.into_iter().take(TOP_SESSIONS).map(|(_, r)| r).collect();
+        let sessions: Vec<SessionRow> = rows
+            .into_iter()
+            .take(TOP_SESSIONS)
+            .map(|(_, r)| r)
+            .collect();
 
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -800,9 +872,14 @@ impl Aggregator {
         let attrib_vec = |m: HashMap<String, AttribUsage>| -> Vec<AttributionUsage> {
             let mut v: Vec<AttributionUsage> = m
                 .into_iter()
-                .map(|(name, a)| AttributionUsage { name, messages: a.messages, sessions: a.sessions.len() as u64, last_day: a.last_day })
+                .map(|(name, a)| AttributionUsage {
+                    name,
+                    messages: a.messages,
+                    sessions: a.sessions.len() as u64,
+                    last_day: a.last_day,
+                })
                 .collect();
-            v.sort_by(|a, b| b.messages.cmp(&a.messages));
+            v.sort_by_key(|a| std::cmp::Reverse(a.messages));
             v
         };
         let skill_usage = attrib_vec(self.skill_usage);
@@ -817,7 +894,7 @@ impl Aggregator {
             by_kind: by_kind_v,
             by_model: named(by_model),
             by_effort: by_effort_v,
-            avg_context: if total.requests > 0 { total.context() / total.requests } else { 0 },
+            avg_context: total.context().checked_div(total.requests).unwrap_or(0),
             cache_read_pct: pct(total.cache_read as f64, total_ctx as f64),
             large_context_volume_pct: context_buckets[4].volume_pct,
             context_buckets,
@@ -828,7 +905,11 @@ impl Aggregator {
             last_five_hour_reset: self.last_five_hour_reset,
             main_sessions,
             total_turns,
-            avg_requests_per_turn: if total_turns > 0 { (main_requests as f64 / total_turns as f64 * 10.0).round() / 10.0 } else { 0.0 },
+            avg_requests_per_turn: if total_turns > 0 {
+                (main_requests as f64 / total_turns as f64 * 10.0).round() / 10.0
+            } else {
+                0.0
+            },
             sessions_over_150k,
             sessions_compacted,
             long_sessions,
@@ -887,7 +968,11 @@ pub(crate) fn trend(days: &HashMap<String, DayStats>, today: &str) -> (Trend, Ve
             let ds = days.get(&day).copied().unwrap_or_default();
             DayRow {
                 requests: ds.tokens.requests,
-                avg_context: if ds.tokens.requests > 0 { ds.tokens.context() / ds.tokens.requests } else { 0 },
+                avg_context: ds
+                    .tokens
+                    .context()
+                    .checked_div(ds.tokens.requests)
+                    .unwrap_or(0),
                 turns: ds.turns,
                 weighted: ds.tokens.weighted(),
                 day,
@@ -897,7 +982,8 @@ pub(crate) fn trend(days: &HashMap<String, DayStats>, today: &str) -> (Trend, Ve
 
     let period = |from_back: i64, to_back: i64| -> PeriodStats {
         let mut tokens = Tokens::default();
-        let (mut turns, mut xhigh_w, mut workflow_w, mut five_hour, mut days_active) = (0u64, 0.0f64, 0.0f64, 0u64, 0u64);
+        let (mut turns, mut xhigh_w, mut workflow_w, mut five_hour, mut days_active) =
+            (0u64, 0.0f64, 0.0f64, 0u64, 0u64);
         for back in from_back..=to_back {
             let day = day_from_epoch((today_idx - back) * 86_400);
             let Some(ds) = days.get(&day) else { continue };
@@ -911,12 +997,22 @@ pub(crate) fn trend(days: &HashMap<String, DayStats>, today: &str) -> (Trend, Ve
             five_hour += ds.five_hour_hits;
         }
         let w = tokens.weighted();
-        let pct = |part: f64| -> u8 { if w <= 0.0 { 0 } else { ((100.0 * part / w).round() as i64).clamp(0, 100) as u8 } };
+        let pct = |part: f64| -> u8 {
+            if w <= 0.0 {
+                0
+            } else {
+                ((100.0 * part / w).round() as i64).clamp(0, 100) as u8
+            }
+        };
         PeriodStats {
             days_active,
             requests: tokens.requests,
-            avg_context: if tokens.requests > 0 { tokens.context() / tokens.requests } else { 0 },
-            requests_per_turn: if turns > 0 { (tokens.requests as f64 / turns as f64 * 10.0).round() / 10.0 } else { 0.0 },
+            avg_context: tokens.context().checked_div(tokens.requests).unwrap_or(0),
+            requests_per_turn: if turns > 0 {
+                (tokens.requests as f64 / turns as f64 * 10.0).round() / 10.0
+            } else {
+                0.0
+            },
             xhigh_pct: pct(xhigh_w),
             workflow_pct: pct(workflow_w),
             five_hour_hits: five_hour,
@@ -924,7 +1020,10 @@ pub(crate) fn trend(days: &HashMap<String, DayStats>, today: &str) -> (Trend, Ve
         }
     };
 
-    let trend = Trend { current: period(0, 6), previous: period(7, 13) };
+    let trend = Trend {
+        current: period(0, 6),
+        previous: period(7, 13),
+    };
     (trend, rows)
 }
 
@@ -933,17 +1032,25 @@ pub(crate) fn trend(days: &HashMap<String, DayStats>, today: &str) -> (Trend, Ve
 // ---------------------------------------------------------------------------
 
 fn k(n: u64) -> String {
-    if n >= 1_000_000 { format!("{:.1}M", n as f64 / 1e6) } else if n >= 1_000 { format!("{}k", n / 1_000) } else { n.to_string() }
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1e6)
+    } else if n >= 1_000 {
+        format!("{}k", n / 1_000)
+    } else {
+        n.to_string()
+    }
 }
 
 pub(crate) fn findings(r: &UsageReport) -> Vec<Finding> {
     let mut out = Vec::new();
-    let f = |severity: &str, title: &str, evidence: String, recommendation: &str, basis: &str| Finding {
-        severity: severity.to_string(),
-        title: title.to_string(),
-        evidence,
-        recommendation: recommendation.to_string(),
-        basis: basis.to_string(),
+    let f = |severity: &str, title: &str, evidence: String, recommendation: &str, basis: &str| {
+        Finding {
+            severity: severity.to_string(),
+            title: title.to_string(),
+            evidence,
+            recommendation: recommendation.to_string(),
+            basis: basis.to_string(),
+        }
     };
 
     let large_share = r.large_context_volume_pct as f64 / 100.0;
@@ -960,7 +1067,11 @@ pub(crate) fn findings(r: &UsageReport) -> Vec<Finding> {
         ));
     }
     if r.long_sessions > 0 {
-        let sev = if r.long_sessions as f64 / r.main_sessions.max(1) as f64 >= 0.3 { "high" } else { "medium" };
+        let sev = if r.long_sessions as f64 / r.main_sessions.max(1) as f64 >= 0.3 {
+            "high"
+        } else {
+            "medium"
+        };
         out.push(f(
             sev,
             "Sessions leben zu lange",
@@ -989,7 +1100,10 @@ pub(crate) fn findings(r: &UsageReport) -> Vec<Finding> {
         out.push(f(
             "medium",
             "Effort xhigh ist der Standard",
-            format!("{}% der gewichteten Nutzung liefen mit effort xhigh.", r.xhigh_share_pct),
+            format!(
+                "{}% der gewichteten Nutzung liefen mit effort xhigh.",
+                r.xhigh_share_pct
+            ),
             "Effort high als Standard; xhigh gezielt für Planung, Root-Cause und Architektur.",
             "berechnet",
         ));
@@ -1016,7 +1130,13 @@ pub(crate) fn findings(r: &UsageReport) -> Vec<Finding> {
         ));
     }
     if out.iter().all(|x| x.severity == "info") {
-        out.push(f("info", "Keine auffälligen Treiber", "Alle Regeln unter ihren Schwellen.".to_string(), "Nichts zu tun.", "heuristik"));
+        out.push(f(
+            "info",
+            "Keine auffälligen Treiber",
+            "Alle Regeln unter ihren Schwellen.".to_string(),
+            "Nichts zu tun.",
+            "heuristik",
+        ));
     }
     out
 }
@@ -1029,13 +1149,18 @@ pub(crate) fn findings(r: &UsageReport) -> Vec<Finding> {
 pub fn analyze_usage() -> Result<UsageReport, String> {
     let root = claude_dir()?.join("projects");
     if !root.is_dir() {
-        return Err("~/.claude/projects existiert nicht — noch keine Claude-Code-Sessions vorhanden.".to_string());
+        return Err(
+            "~/.claude/projects existiert nicht — noch keine Claude-Code-Sessions vorhanden."
+                .to_string(),
+        );
     }
     let mut files = Vec::new();
     walk(&root, &mut files);
     let mut agg = Aggregator::default();
     for file in &files {
-        let Some(meta) = classify(&root, file) else { continue };
+        let Some(meta) = classify(&root, file) else {
+            continue;
+        };
         agg.begin_file(&meta);
         let Ok(fh) = File::open(file) else { continue };
         for line in BufReader::new(fh).split(b'\n').flatten() {
@@ -1044,9 +1169,14 @@ pub fn analyze_usage() -> Result<UsageReport, String> {
             }
             // Cheap prefilter: only lines carrying something we read get parsed.
             let s = String::from_utf8_lossy(&line);
-            if !(s.contains("\"usage\"") || s.contains("\"promptId\"") || s.contains("\"is_error\":true")
-                || s.contains("quotaLimits") || s.contains("ompact") || s.contains("isApiErrorMessage")
-                || s.contains("attributionSkill") || s.contains("attributionMcpServer"))
+            if !(s.contains("\"usage\"")
+                || s.contains("\"promptId\"")
+                || s.contains("\"is_error\":true")
+                || s.contains("quotaLimits")
+                || s.contains("ompact")
+                || s.contains("isApiErrorMessage")
+                || s.contains("attributionSkill")
+                || s.contains("attributionMcpServer"))
             {
                 continue;
             }
@@ -1061,20 +1191,30 @@ mod tests {
     use super::*;
 
     fn meta(kind: Kind) -> FileMeta {
-        FileMeta { kind, project: "P".into(), session: "s1".into() }
+        FileMeta {
+            kind,
+            project: "P".into(),
+            session: "s1".into(),
+        }
     }
 
     #[test]
     fn timestamps_parse_and_roundtrip_days() {
         assert_eq!(parse_ts("2026-01-01T00:00:00.000Z"), Some(1_767_225_600));
         assert_eq!(day_from_epoch(1_767_225_600), "2026-01-01");
-        assert_eq!(day_from_epoch(parse_ts("2026-07-24T10:53:09.720Z").unwrap()), "2026-07-24");
+        assert_eq!(
+            day_from_epoch(parse_ts("2026-07-24T10:53:09.720Z").unwrap()),
+            "2026-07-24"
+        );
         assert_eq!(parse_ts("garbage"), None);
     }
 
     #[test]
     fn project_label_strips_flattened_home_prefix() {
-        assert_eq!(project_label("C--Users-you-Documents-Claude-Skill-switch"), "Claude-Skill-switch");
+        assert_eq!(
+            project_label("C--Users-you-Documents-Claude-Skill-switch"),
+            "Claude-Skill-switch"
+        );
         assert_eq!(project_label("something-else"), "something-else");
     }
 
@@ -1090,23 +1230,38 @@ mod tests {
         a.feed(&m, r#"{"type":"user","timestamp":"2026-07-24T10:00:04Z","quotaLimits":{"status":"rejected","rateLimitType":"five_hour","resetsAt":123}}"#);
         a.feed(&m, "not json");
         let r = a.finish();
-        assert_eq!(r.total.requests, 1, "two lines with the same requestId are one request");
+        assert_eq!(
+            r.total.requests, 1,
+            "two lines with the same requestId are one request"
+        );
         assert_eq!(r.total.cache_read, 1000);
         assert_eq!(r.total_turns, 1, "tool_result lines are not user turns");
         assert_eq!(r.tool_errors, 1);
         assert_eq!(r.five_hour_hits, 1);
         assert_eq!(r.last_five_hour_reset, Some(123));
         assert_eq!(r.unreadable_lines, 1);
-        assert_eq!(r.top_tools_main[0].count, 1, "tool_use ids are deduplicated");
+        assert_eq!(
+            r.top_tools_main[0].count, 1,
+            "tool_use ids are deduplicated"
+        );
         assert_eq!(r.by_kind[0].tokens.requests, 1);
         assert_eq!(r.sessions[0].models, "opus-5:1");
     }
 
     #[test]
-    fn attribution_markers_are_counted_per_line_with_normalized_plugin_names_and_distinct_sessions() {
+    fn attribution_markers_are_counted_per_line_with_normalized_plugin_names_and_distinct_sessions()
+    {
         let mut a = Aggregator::default();
-        let m1 = FileMeta { kind: Kind::Main, project: "P".into(), session: "s1".into() };
-        let m2 = FileMeta { kind: Kind::Main, project: "P".into(), session: "s2".into() };
+        let m1 = FileMeta {
+            kind: Kind::Main,
+            project: "P".into(),
+            session: "s1".into(),
+        };
+        let m2 = FileMeta {
+            kind: Kind::Main,
+            project: "P".into(),
+            session: "s2".into(),
+        };
         a.begin_file(&m1);
         a.begin_file(&m2);
         // Same requestId on two lines: the marker repeats per line, so both count.
@@ -1115,14 +1270,29 @@ mod tests {
         a.feed(&m1, r#"{"type":"assistant","timestamp":"2026-09-02T10:00:00Z","uuid":"u2","attributionSkill":"anthropic-skills:pdf","attributionMcpServer":"Claude Browser","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         a.feed(&m2, r#"{"type":"assistant","timestamp":"2026-09-03T10:00:00Z","uuid":"u3","attributionSkill":"anthropic-skills:pdf","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"output_tokens":1},"content":[]}}"#);
         let r = a.finish();
-        let pdf = r.skill_usage.iter().find(|s| s.name == "anthropic-skills-pdf").expect("plugin marker normalised to folder form");
+        let pdf = r
+            .skill_usage
+            .iter()
+            .find(|s| s.name == "anthropic-skills-pdf")
+            .expect("plugin marker normalised to folder form");
         assert_eq!(pdf.messages, 2);
         assert_eq!(pdf.sessions, 2, "two distinct sessions");
         assert_eq!(pdf.last_day.as_deref(), Some("2026-09-03"));
-        let api = r.skill_usage.iter().find(|s| s.name == "claude-api").unwrap();
-        assert_eq!(api.messages, 2, "two lines sharing a requestId both count — not deduped");
+        let api = r
+            .skill_usage
+            .iter()
+            .find(|s| s.name == "claude-api")
+            .unwrap();
+        assert_eq!(
+            api.messages, 2,
+            "two lines sharing a requestId both count — not deduped"
+        );
         assert_eq!(api.sessions, 1);
-        let browser = r.mcp_usage.iter().find(|s| s.name == "Claude Browser").unwrap();
+        let browser = r
+            .mcp_usage
+            .iter()
+            .find(|s| s.name == "Claude Browser")
+            .unwrap();
         assert_eq!(browser.messages, 1);
     }
 
@@ -1136,7 +1306,11 @@ mod tests {
             days.insert(
                 day,
                 DayStats {
-                    tokens: Tokens { requests: 10, input: 100_000, ..Default::default() },
+                    tokens: Tokens {
+                        requests: 10,
+                        input: 100_000,
+                        ..Default::default()
+                    },
                     turns: 2,
                     xhigh_weighted: 50_000.0,
                     workflow_weighted: 0.0,
@@ -1147,8 +1321,15 @@ mod tests {
         let (t, rows) = trend(&days, today);
         assert_eq!(rows.len(), 14, "always 14 rows, even for empty days");
         assert_eq!(rows[13].day, today, "last row is today");
-        assert_eq!(rows[0].day, day_from_epoch((today_idx - 13) * 86_400), "first row is 13 days back");
-        assert_eq!(rows[6].requests, 0, "the previous-period days have no data and stay zero, not missing");
+        assert_eq!(
+            rows[0].day,
+            day_from_epoch((today_idx - 13) * 86_400),
+            "first row is 13 days back"
+        );
+        assert_eq!(
+            rows[6].requests, 0,
+            "the previous-period days have no data and stay zero, not missing"
+        );
 
         assert_eq!(t.current.days_active, 7);
         assert_eq!(t.current.requests, 70);
@@ -1167,7 +1348,11 @@ mod tests {
     }
 
     fn base_report() -> UsageReport {
-        UsageReport { main_sessions: 5, avg_requests_per_turn: 4.0, ..Default::default() }
+        UsageReport {
+            main_sessions: 5,
+            avg_requests_per_turn: 4.0,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -1190,12 +1375,18 @@ mod tests {
         r.xhigh_share_pct = 65;
         r.avg_requests_per_turn = 10.5;
         let f = findings(&r);
-        let sev = |t: &str| f.iter().find(|x| x.title.starts_with(t)).map(|x| x.severity.clone());
+        let sev = |t: &str| {
+            f.iter()
+                .find(|x| x.title.starts_with(t))
+                .map(|x| x.severity.clone())
+        };
         assert_eq!(sev("Kontextgröße").as_deref(), Some("high"));
         assert_eq!(sev("Workflows").as_deref(), Some("high"));
         assert_eq!(sev("Effort").as_deref(), Some("medium"));
         assert_eq!(sev("Viele Requests").as_deref(), Some("medium"));
-        assert!(f.iter().all(|x| !x.evidence.is_empty() && !x.recommendation.is_empty()));
+        assert!(f
+            .iter()
+            .all(|x| !x.evidence.is_empty() && !x.recommendation.is_empty()));
     }
 
     /// Runs the real analysis over this machine's transcripts. Ignored by default
@@ -1224,11 +1415,17 @@ mod tests {
         );
         println!("skill_usage top 5:");
         for s in r.skill_usage.iter().take(5) {
-            println!("  {} — {} Nachrichten, {} Sessions, zuletzt {:?}", s.name, s.messages, s.sessions, s.last_day);
+            println!(
+                "  {} — {} Nachrichten, {} Sessions, zuletzt {:?}",
+                s.name, s.messages, s.sessions, s.last_day
+            );
         }
         println!("mcp_usage top 5:");
         for s in r.mcp_usage.iter().take(5) {
-            println!("  {} — {} Nachrichten, {} Sessions, zuletzt {:?}", s.name, s.messages, s.sessions, s.last_day);
+            println!(
+                "  {} — {} Nachrichten, {} Sessions, zuletzt {:?}",
+                s.name, s.messages, s.sessions, s.last_day
+            );
         }
         assert!(r.total.requests > 0);
         assert_eq!(r.days.len(), 14);
@@ -1238,6 +1435,8 @@ mod tests {
     fn a_single_small_workflow_does_not_trigger_the_rule() {
         let mut r = base_report();
         r.workflow_share_pct = 3;
-        assert!(findings(&r).iter().all(|x| !x.title.starts_with("Workflows")));
+        assert!(findings(&r)
+            .iter()
+            .all(|x| !x.title.starts_with("Workflows")));
     }
 }

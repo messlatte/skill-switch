@@ -150,7 +150,9 @@ struct Quota {
 impl Cursor {
     /// Consumes one complete transcript line.
     fn feed(&mut self, raw: &str) {
-        let Ok(line) = serde_json::from_str::<Line>(raw) else { return };
+        let Ok(line) = serde_json::from_str::<Line>(raw) else {
+            return;
+        };
         if let Some(ts) = parse_ts(&line.timestamp) {
             if self.first_ts.is_none() {
                 self.first_ts = Some(ts);
@@ -215,7 +217,8 @@ impl Cursor {
                         self.turn_requests += 1;
                         self.last_request_id = line.request_id;
                     }
-                    self.context = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens;
+                    self.context =
+                        u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens;
                 }
                 if msg.model.is_some() {
                     self.model = msg.model;
@@ -239,10 +242,13 @@ impl Cursor {
             return Ok(());
         }
         let mut f = File::open(path).map_err(|e| e.to_string())?;
-        f.seek(SeekFrom::Start(self.scanned)).map_err(|e| e.to_string())?;
+        f.seek(SeekFrom::Start(self.scanned))
+            .map_err(|e| e.to_string())?;
         let want = (len - self.scanned).min(MAX_CHUNK);
         let mut buf = Vec::with_capacity(want as usize);
-        f.take(want).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+        f.take(want)
+            .read_to_end(&mut buf)
+            .map_err(|e| e.to_string())?;
         let Some(last_nl) = buf.iter().rposition(|&b| b == b'\n') else {
             // No newline yet: the line is still being written, or it is longer than
             // MAX_CHUNK. Skip the latter, otherwise the cursor would never move again.
@@ -282,11 +288,21 @@ pub(crate) fn advice(s: &LiveSession) -> Vec<Advice> {
     } else if s.context >= CTX_COMPACT_SOON {
         out.push(a(
             "medium",
-            format!("Kontext {} — vor der nächsten größeren Aufgabe kompaktieren.", k(s.context)),
+            format!(
+                "Kontext {} — vor der nächsten größeren Aufgabe kompaktieren.",
+                k(s.context)
+            ),
             Some("/compact focus on "),
         ));
     } else {
-        out.push(a("ok", format!("Kontext {} — unkritisch. Bei Themenwechsel trotzdem /clear.", k(s.context)), Some("/clear")));
+        out.push(a(
+            "ok",
+            format!(
+                "Kontext {} — unkritisch. Bei Themenwechsel trotzdem /clear.",
+                k(s.context)
+            ),
+            Some("/clear"),
+        ));
     }
 
     if let Some(secs) = s.limit_reset_in_secs {
@@ -315,20 +331,40 @@ pub(crate) fn advice(s: &LiveSession) -> Vec<Advice> {
         ));
     }
     if s.effort.as_deref() == Some("xhigh") {
-        out.push(a("info", "Effort xhigh aktiv — für Implementierung reicht meist high.".to_string(), None));
+        out.push(a(
+            "info",
+            "Effort xhigh aktiv — für Implementierung reicht meist high.".to_string(),
+            None,
+        ));
     }
     if s.agents_active > 0 {
-        out.push(a("info", format!("{} Agent(s) schreiben gerade — jeder mit eigenem Kontext.", s.agents_active), None));
+        out.push(a(
+            "info",
+            format!(
+                "{} Agent(s) schreiben gerade — jeder mit eigenem Kontext.",
+                s.agents_active
+            ),
+            None,
+        ));
     }
     out
 }
 
 fn now_secs() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 fn mtime_secs(p: &Path) -> Option<i64> {
-    fs::metadata(p).ok()?.modified().ok()?.duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs() as i64)
+    fs::metadata(p)
+        .ok()?
+        .modified()
+        .ok()?
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs() as i64)
 }
 
 fn count_active_agents(session_dir: &Path, now: i64) -> u64 {
@@ -338,7 +374,9 @@ fn count_active_agents(session_dir: &Path, now: i64) -> u64 {
             let p = e.path();
             if p.is_dir() {
                 walk(&p, now, n);
-            } else if p.extension().is_some_and(|x| x == "jsonl") && mtime_secs(&p).is_some_and(|m| now - m <= ACTIVE_SECS) {
+            } else if p.extension().is_some_and(|x| x == "jsonl")
+                && mtime_secs(&p).is_some_and(|m| now - m <= ACTIVE_SECS)
+            {
                 *n += 1;
             }
         }
@@ -351,27 +389,40 @@ fn count_active_agents(session_dir: &Path, now: i64) -> u64 {
 #[tauri::command(async)]
 pub fn list_live_sessions(state: State<LiveState>) -> Result<Vec<LiveSession>, String> {
     let root = claude_dir()?.join("projects");
-    let mut cursors = state.0.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let mut cursors = state
+        .0
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
     collect(&root, &mut cursors, now_secs())
 }
 
 /// The command without Tauri state, so tests can run it on real transcripts.
-fn collect(root: &Path, cursors: &mut HashMap<PathBuf, Cursor>, now: i64) -> Result<Vec<LiveSession>, String> {
+fn collect(
+    root: &Path,
+    cursors: &mut HashMap<PathBuf, Cursor>,
+    now: i64,
+) -> Result<Vec<LiveSession>, String> {
     let mut out = Vec::new();
-    let Ok(projects) = fs::read_dir(root) else { return Ok(out) };
+    let Ok(projects) = fs::read_dir(root) else {
+        return Ok(out);
+    };
     for proj in projects.flatten() {
         let proj_path = proj.path();
         if !proj_path.is_dir() {
             continue;
         }
         let project = project_label(&proj.file_name().to_string_lossy());
-        let Ok(files) = fs::read_dir(&proj_path) else { continue };
+        let Ok(files) = fs::read_dir(&proj_path) else {
+            continue;
+        };
         for f in files.flatten() {
             let path = f.path();
             if !path.is_file() || path.extension().is_none_or(|x| x != "jsonl") {
                 continue;
             }
-            let Some(mtime) = mtime_secs(&path) else { continue };
+            let Some(mtime) = mtime_secs(&path) else {
+                continue;
+            };
             if now - mtime > SHOW_SECS {
                 continue;
             }
@@ -383,7 +434,10 @@ fn collect(root: &Path, cursors: &mut HashMap<PathBuf, Cursor>, now: i64) -> Res
             if cur.requests == 0 && cur.turns == 0 {
                 continue; // title-only or empty file
             }
-            let id = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let id = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
             let session_dir = proj_path.join(&id);
             let last = cur.last_ts.unwrap_or(mtime);
             let mut s = LiveSession {
@@ -408,7 +462,10 @@ fn collect(root: &Path, cursors: &mut HashMap<PathBuf, Cursor>, now: i64) -> Res
                 model: cur.model.clone(),
                 effort: cur.effort.clone(),
                 context: cur.context,
-                limit_reset_in_secs: cur.limit_reset_at.map(|r| r as i64 - now).filter(|d| *d > 0),
+                limit_reset_in_secs: cur
+                    .limit_reset_at
+                    .map(|r| r as i64 - now)
+                    .filter(|d| *d > 0),
                 agents_active: count_active_agents(&session_dir, now),
                 advice: Vec::new(),
             };
@@ -418,7 +475,7 @@ fn collect(root: &Path, cursors: &mut HashMap<PathBuf, Cursor>, now: i64) -> Res
     }
     // Drop cursors of files that fell out of the window so the map can't grow forever.
     cursors.retain(|p, _| mtime_secs(p).is_some_and(|m| now - m <= SHOW_SECS));
-    out.sort_by(|a, b| a.seconds_since_activity.cmp(&b.seconds_since_activity));
+    out.sort_by_key(|a| a.seconds_since_activity);
     Ok(out)
 }
 
@@ -437,7 +494,10 @@ mod tests {
         c.feed(r#"{"type":"assistant","timestamp":"2026-09-06T01:00:04Z","requestId":"r2","message":{"model":"claude-opus-5","usage":{"input_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":310000},"content":[]}}"#);
         c.feed(r#"{"type":"user","timestamp":"2026-09-06T01:05:00Z","quotaLimits":{"status":"rejected","rateLimitType":"five_hour","resetsAt":999}}"#);
         assert_eq!(c.turns, 1);
-        assert_eq!(c.requests, 2, "same requestId on consecutive lines counts once");
+        assert_eq!(
+            c.requests, 2,
+            "same requestId on consecutive lines counts once"
+        );
         assert_eq!(c.turn_requests, 2);
         assert_eq!(c.turn_errors, 1);
         assert_eq!(c.context, 310_001);
@@ -461,7 +521,11 @@ mod tests {
         let mut c = Cursor::default();
         c.catch_up(&p).unwrap();
         assert_eq!(c.turns, 1);
-        assert_eq!(c.scanned as usize, l1.len() + 1, "partial trailing line is left for later");
+        assert_eq!(
+            c.scanned as usize,
+            l1.len() + 1,
+            "partial trailing line is left for later"
+        );
         fs::write(&p, format!("{l1}\n{l2}\n")).unwrap();
         c.catch_up(&p).unwrap();
         assert_eq!(c.requests, 1);
@@ -484,7 +548,11 @@ mod tests {
         let t = std::time::Instant::now();
         let second = collect(&root, &mut cursors, now_secs()).unwrap();
         let warm = t.elapsed();
-        println!("cold {cold:?} → {} sessions, warm {warm:?} → {} sessions", first.len(), second.len());
+        println!(
+            "cold {cold:?} → {} sessions, warm {warm:?} → {} sessions",
+            first.len(),
+            second.len()
+        );
         for s in &second {
             println!(
                 "{} {:<22} {:<8} active={} ago={}s ctx={} turns={} req={}/{} err={} age={}s agents={} advice={}",
@@ -495,7 +563,10 @@ mod tests {
     }
 
     fn sess(context: u64) -> LiveSession {
-        LiveSession { context, ..Default::default() }
+        LiveSession {
+            context,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -504,7 +575,10 @@ mod tests {
         assert_eq!(lvl(50_000), "ok");
         assert_eq!(lvl(250_000), "medium");
         assert_eq!(lvl(700_000), "high");
-        assert_eq!(advice(&sess(700_000))[0].command.as_deref(), Some("/compact focus on "));
+        assert_eq!(
+            advice(&sess(700_000))[0].command.as_deref(),
+            Some("/compact focus on ")
+        );
     }
 
     #[test]
