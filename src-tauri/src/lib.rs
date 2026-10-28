@@ -59,8 +59,8 @@ struct EnvInfo {
 }
 
 pub(crate) fn claude_dir() -> Result<PathBuf, String> {
-    let profile = std::env::var("USERPROFILE")
-        .map_err(|_| "USERPROFILE ist nicht gesetzt.".to_string())?;
+    let profile =
+        std::env::var("USERPROFILE").map_err(|_| "USERPROFILE ist nicht gesetzt.".to_string())?;
     Ok(PathBuf::from(profile).join(".claude"))
 }
 
@@ -123,7 +123,9 @@ fn read_skill_lock() -> std::collections::HashMap<String, (String, String)> {
     let Ok(profile) = std::env::var("USERPROFILE") else {
         return map;
     };
-    let path = PathBuf::from(profile).join(".agents").join(".skill-lock.json");
+    let path = PathBuf::from(profile)
+        .join(".agents")
+        .join(".skill-lock.json");
     let Some(lock) = read_json_file(&path) else {
         return map;
     };
@@ -182,7 +184,10 @@ fn read_skills_in(
 
         let skill_md = path.join("SKILL.md");
         let (description, skill_md_path) = match fs::read_to_string(&skill_md) {
-            Ok(content) => (parse_description(&content), Some(skill_md.to_string_lossy().to_string())),
+            Ok(content) => (
+                parse_description(&content),
+                Some(skill_md.to_string_lossy().to_string()),
+            ),
             Err(_) => ("(keine SKILL.md gefunden)".to_string(), None),
         };
 
@@ -268,7 +273,9 @@ fn set_skill_enabled(name: String, enabled: bool) -> Result<(), String> {
     }
 
     if fs::symlink_metadata(&src).is_err() {
-        return Err(format!("\"{name}\" wurde nicht gefunden. Vielleicht wurde es bereits verschoben."));
+        return Err(format!(
+            "\"{name}\" wurde nicht gefunden. Vielleicht wurde es bereits verschoben."
+        ));
     }
     if fs::symlink_metadata(&dst).is_ok() {
         return Err(format!(
@@ -313,7 +320,11 @@ pub(crate) fn write_settings(value: &Value) -> Result<(), String> {
 }
 
 /// Sets or removes `skillOverrides[name]` and drops `skillOverrides` once it is empty.
-fn apply_skill_override(mut settings: Value, name: &str, value: Option<&str>) -> Result<Value, String> {
+fn apply_skill_override(
+    mut settings: Value,
+    name: &str,
+    value: Option<&str>,
+) -> Result<Value, String> {
     let obj = settings
         .as_object_mut()
         .ok_or_else(|| "settings.json hat kein Objekt auf oberster Ebene.".to_string())?;
@@ -396,8 +407,7 @@ fn read_env() -> Result<EnvInfo, String> {
         .unwrap_or_default();
 
     let mut plugins = Vec::new();
-    if let Some(installed) = read_json_file(&base.join("plugins").join("installed_plugins.json"))
-    {
+    if let Some(installed) = read_json_file(&base.join("plugins").join("installed_plugins.json")) {
         if let Some(map) = installed.get("plugins").and_then(Value::as_object) {
             for (id, records) in map {
                 let version = records
@@ -535,7 +545,10 @@ mod tests {
         assert_eq!(s2["theme"], "dark");
 
         let s3 = apply_skill_override(s2, "foo", None).unwrap();
-        assert!(s3.get("skillOverrides").is_none(), "empty skillOverrides should be dropped");
+        assert!(
+            s3.get("skillOverrides").is_none(),
+            "empty skillOverrides should be dropped"
+        );
         assert_eq!(s3["theme"], "dark");
     }
 
@@ -548,7 +561,10 @@ mod tests {
 
         let s3 = apply_skill_override(s2, "foo", None).unwrap();
         assert!(s3["skillOverrides"].get("foo").is_none());
-        assert_eq!(s3["skillOverrides"]["bar"], "off", "removing one entry must not drop siblings");
+        assert_eq!(
+            s3["skillOverrides"]["bar"], "off",
+            "removing one entry must not drop siblings"
+        );
     }
 
     #[test]

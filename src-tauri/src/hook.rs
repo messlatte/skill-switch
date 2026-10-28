@@ -34,21 +34,26 @@ fn script_path(app: &AppHandle) -> Result<PathBuf, String> {
 /// its UTF-8 BOM; without it PowerShell 5.1 reads it as ANSI and garbles "≈".
 fn write_script(app: &AppHandle) -> Result<PathBuf, String> {
     let path = script_path(app)?;
-    fs::write(&path, SCRIPT_CONTENT).map_err(|e| format!("Konnte Hook-Skript nicht schreiben: {e}"))?;
+    fs::write(&path, SCRIPT_CONTENT)
+        .map_err(|e| format!("Konnte Hook-Skript nicht schreiben: {e}"))?;
     Ok(path)
 }
 
 /// Matches by file name, not full path, so entries from an older install location
 /// still count as ours.
 fn args_reference_script(args: &[Value]) -> bool {
-    args.iter()
-        .any(|a| a.as_str().is_some_and(|s| s.to_lowercase().ends_with("context-hook.ps1")))
+    args.iter().any(|a| {
+        a.as_str()
+            .is_some_and(|s| s.to_lowercase().ends_with("context-hook.ps1"))
+    })
 }
 
 fn hooks_matching_script(hooks: &[Value]) -> bool {
-    hooks
-        .iter()
-        .any(|h| h.get("args").and_then(Value::as_array).is_some_and(|a| args_reference_script(a)))
+    hooks.iter().any(|h| {
+        h.get("args")
+            .and_then(Value::as_array)
+            .is_some_and(|a| args_reference_script(a))
+    })
 }
 
 fn hook_installed(settings: &Value) -> bool {
@@ -57,9 +62,12 @@ fn hook_installed(settings: &Value) -> bool {
         .and_then(|h| h.get("UserPromptSubmit"))
         .and_then(Value::as_array)
         .is_some_and(|entries| {
-            entries
-                .iter()
-                .any(|entry| entry.get("hooks").and_then(Value::as_array).is_some_and(|hs| hooks_matching_script(hs)))
+            entries.iter().any(|entry| {
+                entry
+                    .get("hooks")
+                    .and_then(Value::as_array)
+                    .is_some_and(|hs| hooks_matching_script(hs))
+            })
         })
 }
 
@@ -76,7 +84,11 @@ fn build_hook_entry(script: &str) -> Value {
 
 /// Adds one `hooks.UserPromptSubmit` entry for our script (idempotent) or removes
 /// only that entry. Other hooks stay untouched.
-pub(crate) fn apply_context_hook(mut settings: Value, script: &str, enable: bool) -> Result<Value, String> {
+pub(crate) fn apply_context_hook(
+    mut settings: Value,
+    script: &str,
+    enable: bool,
+) -> Result<Value, String> {
     let obj = settings
         .as_object_mut()
         .ok_or_else(|| "settings.json hat kein Objekt auf oberster Ebene.".to_string())?;
@@ -91,24 +103,40 @@ pub(crate) fn apply_context_hook(mut settings: Value, script: &str, enable: bool
         let ups = hooks_obj
             .entry("UserPromptSubmit")
             .or_insert_with(|| Value::Array(Vec::new()));
-        let ups_arr = ups
-            .as_array_mut()
-            .ok_or_else(|| "\"hooks.UserPromptSubmit\" in settings.json ist kein Array.".to_string())?;
+        let ups_arr = ups.as_array_mut().ok_or_else(|| {
+            "\"hooks.UserPromptSubmit\" in settings.json ist kein Array.".to_string()
+        })?;
 
-        let already_present = ups_arr
-            .iter()
-            .any(|entry| entry.get("hooks").and_then(Value::as_array).is_some_and(|hs| hooks_matching_script(hs)));
+        let already_present = ups_arr.iter().any(|entry| {
+            entry
+                .get("hooks")
+                .and_then(Value::as_array)
+                .is_some_and(|hs| hooks_matching_script(hs))
+        });
         if !already_present {
             ups_arr.push(build_hook_entry(script));
         }
     } else if let Some(hooks_obj) = obj.get_mut("hooks").and_then(Value::as_object_mut) {
-        if let Some(ups_arr) = hooks_obj.get_mut("UserPromptSubmit").and_then(Value::as_array_mut) {
+        if let Some(ups_arr) = hooks_obj
+            .get_mut("UserPromptSubmit")
+            .and_then(Value::as_array_mut)
+        {
             for entry in ups_arr.iter_mut() {
                 if let Some(inner) = entry.get_mut("hooks").and_then(Value::as_array_mut) {
-                    inner.retain(|h| !h.get("args").and_then(Value::as_array).is_some_and(|a| args_reference_script(a)));
+                    inner.retain(|h| {
+                        !h.get("args")
+                            .and_then(Value::as_array)
+                            .is_some_and(|a| args_reference_script(a))
+                    });
                 }
             }
-            ups_arr.retain(|entry| entry.get("hooks").and_then(Value::as_array).map(|a| !a.is_empty()).unwrap_or(true));
+            ups_arr.retain(|entry| {
+                entry
+                    .get("hooks")
+                    .and_then(Value::as_array)
+                    .map(|a| !a.is_empty())
+                    .unwrap_or(true)
+            });
             if ups_arr.is_empty() {
                 hooks_obj.remove("UserPromptSubmit");
             }
@@ -121,7 +149,9 @@ pub(crate) fn apply_context_hook(mut settings: Value, script: &str, enable: bool
 }
 
 fn apply_hook_setting(app: &AppHandle, script: &str, enable: bool) -> Result<(), String> {
-    let _guard = SETTINGS_LOCK.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let _guard = SETTINGS_LOCK
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
 
     let path = settings_path()?;
     let (original_text, file_existed) = match fs::read_to_string(&path) {
@@ -197,7 +227,10 @@ mod tests {
         let s = apply_context_hook(settings, SCRIPT, true).unwrap();
         assert_eq!(s["theme"], "dark");
         assert_eq!(s["hooks"]["UserPromptSubmit"].as_array().unwrap().len(), 2);
-        assert_eq!(s["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"], "other.exe");
+        assert_eq!(
+            s["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"],
+            "other.exe"
+        );
     }
 
     #[test]
@@ -220,7 +253,10 @@ mod tests {
     fn removing_last_entry_cleans_up_empty_containers() {
         let s = apply_context_hook(serde_json::json!({ "theme": "dark" }), SCRIPT, true).unwrap();
         let s2 = apply_context_hook(s, SCRIPT, false).unwrap();
-        assert!(s2.get("hooks").is_none(), "empty hooks object should be dropped");
+        assert!(
+            s2.get("hooks").is_none(),
+            "empty hooks object should be dropped"
+        );
         assert_eq!(s2["theme"], "dark");
     }
 
@@ -239,11 +275,17 @@ mod tests {
         let settings = serde_json::json!({
             "hooks": { "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "powershell.exe", "args": ["-File", "C:\\Old\\Dir\\context-hook.ps1"] }] }] }
         });
-        assert!(hook_installed(&settings), "old-location entry should still count as installed");
+        assert!(
+            hook_installed(&settings),
+            "old-location entry should still count as installed"
+        );
         // Re-installing at the new SCRIPT path must not add a second entry.
         let s2 = apply_context_hook(settings, SCRIPT, true).unwrap();
         assert_eq!(s2["hooks"]["UserPromptSubmit"].as_array().unwrap().len(), 1);
-        assert_eq!(s2["hooks"]["UserPromptSubmit"][0]["hooks"][0]["args"][1], "C:\\Old\\Dir\\context-hook.ps1");
+        assert_eq!(
+            s2["hooks"]["UserPromptSubmit"][0]["hooks"][0]["args"][1],
+            "C:\\Old\\Dir\\context-hook.ps1"
+        );
     }
 
     #[test]

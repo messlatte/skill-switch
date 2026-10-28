@@ -152,8 +152,9 @@ fn ensure_claude_dir(project: &Path) -> Result<(), String> {
     match fs::metadata(&dir) {
         Ok(m) if m.is_dir() => Ok(()),
         Ok(_) => Err("In diesem Projekt ist \".claude\" eine Datei, kein Ordner.".to_string()),
-        Err(_) => fs::create_dir_all(&dir)
-            .map_err(|e| format!("Konnte \".claude\" nicht anlegen: {e}")),
+        Err(_) => {
+            fs::create_dir_all(&dir).map_err(|e| format!("Konnte \".claude\" nicht anlegen: {e}"))
+        }
     }
 }
 
@@ -212,7 +213,10 @@ fn apply_gateway_discovery(mut settings: Value, enabled: bool) -> Result<Value, 
         .ok_or_else(|| "\"env\" in settings.local.json ist kein Objekt.".to_string())?;
 
     if enabled {
-        env_obj.insert(GATEWAY_DISCOVERY_KEY.to_string(), Value::String("1".to_string()));
+        env_obj.insert(
+            GATEWAY_DISCOVERY_KEY.to_string(),
+            Value::String("1".to_string()),
+        );
     } else {
         env_obj.remove(GATEWAY_DISCOVERY_KEY);
     }
@@ -246,7 +250,12 @@ fn backup_dir(app: &AppHandle, subfolder: &str) -> Result<PathBuf, String> {
 
 /// Best-effort: returns a warning instead of failing the caller.
 /// `file_label` is the name of the backed-up file and prefixes the backup name.
-pub(crate) fn rotate_backup(app: &AppHandle, subfolder: &str, file_label: &str, content: &str) -> Option<String> {
+pub(crate) fn rotate_backup(
+    app: &AppHandle,
+    subfolder: &str,
+    file_label: &str,
+    content: &str,
+) -> Option<String> {
     let dir = match backup_dir(app, subfolder) {
         Ok(d) => d,
         Err(e) => return Some(e),
@@ -283,7 +292,11 @@ fn check_gitignore(project: &Path) -> bool {
     content.lines().map(str::trim).any(|l| {
         matches!(
             l,
-            ".claude/settings.local.json" | "settings.local.json" | "*.local.json" | ".claude/" | ".claude"
+            ".claude/settings.local.json"
+                | "settings.local.json"
+                | "*.local.json"
+                | ".claude/"
+                | ".claude"
         )
     })
 }
@@ -489,7 +502,9 @@ pub fn set_omniroute_config(
     if trimmed.is_empty() {
         return Err("Basis-URL darf nicht leer sein.".to_string());
     }
-    let _guard = OMNI_LOCK.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let _guard = OMNI_LOCK
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
     let mut cfg = read_config(&app)?;
     cfg.base_url = trimmed.to_string();
     if let Some(key) = api_key {
@@ -503,10 +518,16 @@ pub fn set_omniroute_config(
 #[tauri::command]
 pub fn add_omniroute_project(app: AppHandle, path: String) -> Result<(), String> {
     let project = validate_project_path(&path)?;
-    let _guard = OMNI_LOCK.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let _guard = OMNI_LOCK
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
     let mut cfg = read_config(&app)?;
     let key = normalize_key(&project);
-    if cfg.projects.iter().any(|p| normalize_key(Path::new(p)) == key) {
+    if cfg
+        .projects
+        .iter()
+        .any(|p| normalize_key(Path::new(p)) == key)
+    {
         return Err("Dieses Projekt ist bereits in der Liste.".to_string());
     }
     cfg.projects.push(project.to_string_lossy().to_string());
@@ -515,7 +536,9 @@ pub fn add_omniroute_project(app: AppHandle, path: String) -> Result<(), String>
 
 #[tauri::command]
 pub fn remove_omniroute_project(app: AppHandle, path: String) -> Result<(), String> {
-    let _guard = OMNI_LOCK.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let _guard = OMNI_LOCK
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
     let mut cfg = read_config(&app)?;
     let key = normalize_key(Path::new(path.trim()));
 
@@ -536,15 +559,23 @@ pub fn remove_omniroute_project(app: AppHandle, path: String) -> Result<(), Stri
 /// `Ok(None)`: done or nothing to change. `Ok(Some(warning))`: route written, but the
 /// backup or .gitignore check has a warning. `Err`: nothing was written.
 #[tauri::command]
-pub fn set_project_route(app: AppHandle, path: String, active: bool) -> Result<Option<String>, String> {
+pub fn set_project_route(
+    app: AppHandle,
+    path: String,
+    active: bool,
+) -> Result<Option<String>, String> {
     let project = validate_project_path(&path)?;
 
     let cfg = read_config(&app)?;
     if active && cfg.api_key.is_empty() {
-        return Err("Kein OmniRoute-API-Key hinterlegt. Erst in den Einstellungen eintragen.".to_string());
+        return Err(
+            "Kein OmniRoute-API-Key hinterlegt. Erst in den Einstellungen eintragen.".to_string(),
+        );
     }
 
-    let _guard = OMNI_LOCK.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let _guard = OMNI_LOCK
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
 
     ensure_claude_dir(&project)?;
     let settings_path = project_settings_path(&project);
@@ -567,7 +598,12 @@ pub fn set_project_route(app: AppHandle, path: String, active: bool) -> Result<O
     }
 
     let mut warning = if file_existed {
-        rotate_backup(&app, &project_backup_key(&project), "settings.local.json", &original_text)
+        rotate_backup(
+            &app,
+            &project_backup_key(&project),
+            "settings.local.json",
+            &original_text,
+        )
     } else {
         None
     };
@@ -590,10 +626,16 @@ pub fn set_project_route(app: AppHandle, path: String, active: bool) -> Result<O
 
 /// Separate switch from the route itself, but only useful while the route is on.
 #[tauri::command]
-pub fn set_gateway_discovery(app: AppHandle, path: String, enabled: bool) -> Result<Option<String>, String> {
+pub fn set_gateway_discovery(
+    app: AppHandle,
+    path: String,
+    enabled: bool,
+) -> Result<Option<String>, String> {
     let project = validate_project_path(&path)?;
 
-    let _guard = OMNI_LOCK.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let _guard = OMNI_LOCK
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
 
     let settings_path = project_settings_path(&project);
     let (original_text, file_existed) = match fs::read_to_string(&settings_path) {
@@ -618,7 +660,12 @@ pub fn set_gateway_discovery(app: AppHandle, path: String, enabled: bool) -> Res
     }
 
     let warning = if file_existed {
-        rotate_backup(&app, &project_backup_key(&project), "settings.local.json", &original_text)
+        rotate_backup(
+            &app,
+            &project_backup_key(&project),
+            "settings.local.json",
+            &original_text,
+        )
     } else {
         None
     };
@@ -673,21 +720,34 @@ pub fn test_omniroute_connection(app: AppHandle) -> Result<ConnectionTestResult,
         &host,
         port,
         &path,
-        &[("x-api-key", cfg.api_key.as_str()), ("anthropic-version", "2023-06-01")],
+        &[
+            ("x-api-key", cfg.api_key.as_str()),
+            ("anthropic-version", "2023-06-01"),
+        ],
         &body,
         Duration::from_secs(20),
     )?;
     let latency_ms = started.elapsed().map(|d| d.as_millis() as u64).unwrap_or(0);
 
-    let parsed: Value = serde_json::from_str(&response_body)
-        .map_err(|_| format!("Unerwartete Antwort von OmniRoute (HTTP {status}): {response_body}"))?;
+    let parsed: Value = serde_json::from_str(&response_body).map_err(|_| {
+        format!("Unerwartete Antwort von OmniRoute (HTTP {status}): {response_body}")
+    })?;
 
     if let Some(model) = parsed.get("model").and_then(Value::as_str) {
-        Ok(ConnectionTestResult { model: model.to_string(), latency_ms })
-    } else if let Some(message) = parsed.get("error").and_then(|e| e.get("message")).and_then(Value::as_str) {
+        Ok(ConnectionTestResult {
+            model: model.to_string(),
+            latency_ms,
+        })
+    } else if let Some(message) = parsed
+        .get("error")
+        .and_then(|e| e.get("message"))
+        .and_then(Value::as_str)
+    {
         Err(format!("OmniRoute-Fehler: {message}"))
     } else {
-        Err(format!("Unerwartete Antwort von OmniRoute (HTTP {status}): {response_body}"))
+        Err(format!(
+            "Unerwartete Antwort von OmniRoute (HTTP {status}): {response_body}"
+        ))
     }
 }
 
@@ -715,7 +775,11 @@ fn fresh_path() -> String {
         .collect();
     for entry in registry_paths.into_iter().flatten() {
         for p in entry.split(';') {
-            if !p.is_empty() && !parts.iter().any(|existing| existing.eq_ignore_ascii_case(p)) {
+            if !p.is_empty()
+                && !parts
+                    .iter()
+                    .any(|existing| existing.eq_ignore_ascii_case(p))
+            {
                 parts.push(p.to_string());
             }
         }
@@ -759,14 +823,20 @@ pub fn start_omniroute(app: AppHandle, state: State<ProxyState>) -> Result<(), S
         .spawn()
         .map_err(|e| format!("Konnte omniroute nicht starten: {e}"))?;
 
-    let mut guard = state.0.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let mut guard = state
+        .0
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
     *guard = Some(child);
     Ok(())
 }
 
 #[tauri::command(async)]
 pub fn stop_omniroute(state: State<ProxyState>) -> Result<(), String> {
-    let mut guard = state.0.lock().map_err(|_| "Interner Sperr-Fehler.".to_string())?;
+    let mut guard = state
+        .0
+        .lock()
+        .map_err(|_| "Interner Sperr-Fehler.".to_string())?;
     let Some(mut child) = guard.take() else {
         return Err(
             "Kein von Skill Switch gestarteter Dienst bekannt. Falls trotzdem etwas auf dem Port läuft, im Terminal beenden.".to_string(),
@@ -792,7 +862,9 @@ pub fn open_omniroute_terminal(app: AppHandle, path: String) -> Result<(), Strin
     let project = validate_project_path(&path)?;
     let cfg = read_config(&app)?;
     if cfg.api_key.is_empty() {
-        return Err("Kein OmniRoute-API-Key hinterlegt. Erst in den Einstellungen eintragen.".to_string());
+        return Err(
+            "Kein OmniRoute-API-Key hinterlegt. Erst in den Einstellungen eintragen.".to_string(),
+        );
     }
 
     let has_wt = Command::new("where")
@@ -860,7 +932,8 @@ mod tests {
 
     #[test]
     fn route_sets_and_clears_both_keys_without_touching_siblings() {
-        let settings = serde_json::json!({ "otherSetting": true, "env": { "OTHER_VAR": "keep-me" } });
+        let settings =
+            serde_json::json!({ "otherSetting": true, "env": { "OTHER_VAR": "keep-me" } });
         let s2 = apply_route(settings, Some(("http://localhost:20128/v1", "sk-test"))).unwrap();
         assert_eq!(s2["env"]["ANTHROPIC_BASE_URL"], "http://localhost:20128/v1");
         assert_eq!(s2["env"]["ANTHROPIC_AUTH_TOKEN"], "sk-test");
@@ -870,7 +943,10 @@ mod tests {
         let s3 = apply_route(s2, None).unwrap();
         assert!(s3["env"].get("ANTHROPIC_BASE_URL").is_none());
         assert!(s3["env"].get("ANTHROPIC_AUTH_TOKEN").is_none());
-        assert_eq!(s3["env"]["OTHER_VAR"], "keep-me", "unrelated env var must survive disabling the route");
+        assert_eq!(
+            s3["env"]["OTHER_VAR"], "keep-me",
+            "unrelated env var must survive disabling the route"
+        );
     }
 
     #[test]
@@ -879,7 +955,9 @@ mod tests {
             "env": { "ANTHROPIC_BASE_URL": "http://localhost:20128/v1", "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1", "OTHER_VAR": "keep-me" }
         });
         let s2 = apply_route(settings, None).unwrap();
-        assert!(s2["env"].get("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY").is_none());
+        assert!(s2["env"]
+            .get("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY")
+            .is_none());
         assert_eq!(s2["env"]["OTHER_VAR"], "keep-me");
     }
 
@@ -891,7 +969,9 @@ mod tests {
         assert_eq!(s2["env"]["OTHER_VAR"], "keep-me");
 
         let s3 = apply_gateway_discovery(s2, false).unwrap();
-        assert!(s3["env"].get("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY").is_none());
+        assert!(s3["env"]
+            .get("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY")
+            .is_none());
         assert_eq!(s3["env"]["OTHER_VAR"], "keep-me");
     }
 
@@ -901,13 +981,20 @@ mod tests {
         let s2 = apply_route(settings, Some(("http://x", "k"))).unwrap();
         assert!(s2.get("env").is_some());
         let s3 = apply_route(s2, None).unwrap();
-        assert!(s3.get("env").is_none(), "empty env object should be dropped");
+        assert!(
+            s3.get("env").is_none(),
+            "empty env object should be dropped"
+        );
     }
 
     #[test]
     fn route_rejects_non_object_root_and_non_object_env() {
         assert!(apply_route(serde_json::json!([1]), Some(("u", "k"))).is_err());
-        assert!(apply_route(serde_json::json!({ "env": "not-an-object" }), Some(("u", "k"))).is_err());
+        assert!(apply_route(
+            serde_json::json!({ "env": "not-an-object" }),
+            Some(("u", "k"))
+        )
+        .is_err());
     }
 
     #[test]
@@ -919,28 +1006,49 @@ mod tests {
         // "my..folder" must pass the ".." check. It doesn't exist here, so the
         // expected error comes from the existence check instead.
         match validate_project_path("C:\\Users\\nobody\\my..folder") {
-            Err(msg) => assert!(msg.contains("existiert nicht"), "should fail on existence, not on \"..\": {msg}"),
+            Err(msg) => assert!(
+                msg.contains("existiert nicht"),
+                "should fail on existence, not on \"..\": {msg}"
+            ),
             Ok(_) => panic!("should not exist"),
         }
     }
 
     #[test]
     fn normalize_key_collapses_trailing_separators_and_case() {
-        assert_eq!(normalize_key(Path::new("C:\\Foo\\Bar\\")), normalize_key(Path::new("c:\\foo\\bar")));
+        assert_eq!(
+            normalize_key(Path::new("C:\\Foo\\Bar\\")),
+            normalize_key(Path::new("c:\\foo\\bar"))
+        );
     }
 
     #[test]
     fn extract_host_port_reads_configured_port() {
-        assert_eq!(extract_host_port("http://localhost:20128/v1").unwrap(), ("localhost".to_string(), 20128));
-        assert_eq!(extract_host_port("http://localhost:20128").unwrap(), ("localhost".to_string(), 20128));
+        assert_eq!(
+            extract_host_port("http://localhost:20128/v1").unwrap(),
+            ("localhost".to_string(), 20128)
+        );
+        assert_eq!(
+            extract_host_port("http://localhost:20128").unwrap(),
+            ("localhost".to_string(), 20128)
+        );
         assert!(extract_host_port("not a url").is_err());
     }
 
     #[test]
     fn messages_path_joins_regardless_of_trailing_slash_or_missing_v1() {
-        assert_eq!(messages_path("http://localhost:20128/v1").unwrap(), "/v1/messages");
-        assert_eq!(messages_path("http://localhost:20128/v1/").unwrap(), "/v1/messages");
-        assert_eq!(messages_path("http://localhost:20128").unwrap(), "/messages");
+        assert_eq!(
+            messages_path("http://localhost:20128/v1").unwrap(),
+            "/v1/messages"
+        );
+        assert_eq!(
+            messages_path("http://localhost:20128/v1/").unwrap(),
+            "/v1/messages"
+        );
+        assert_eq!(
+            messages_path("http://localhost:20128").unwrap(),
+            "/messages"
+        );
         assert!(messages_path("not a url").is_err());
     }
 
@@ -950,7 +1058,11 @@ mod tests {
         let matches = |line: &str| {
             matches!(
                 line.trim(),
-                ".claude/settings.local.json" | "settings.local.json" | "*.local.json" | ".claude/" | ".claude"
+                ".claude/settings.local.json"
+                    | "settings.local.json"
+                    | "*.local.json"
+                    | ".claude/"
+                    | ".claude"
             )
         };
         assert!(matches(".claude/settings.local.json"));
