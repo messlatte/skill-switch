@@ -7,7 +7,7 @@ mod usage;
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -316,7 +316,37 @@ pub(crate) fn write_settings(value: &Value) -> Result<(), String> {
     let path = settings_path()?;
     let text = serde_json::to_string_pretty(value)
         .map_err(|e| format!("Konnte settings.json nicht serialisieren: {e}"))?;
-    fs::write(&path, text).map_err(|e| format!("Konnte settings.json nicht schreiben: {e}"))
+    write_atomic(&path, &text).map_err(|e| format!("Konnte settings.json nicht schreiben: {e}"))
+}
+
+/// Writes to a temp file next to `path` and renames it over `path`, so a crash
+/// mid-write leaves the old file instead of a truncated one. Per its docs `fs::rename`
+/// replaces an existing file on Windows too; the tests below check that.
+fn write_atomic(path: &Path, contents: &str) -> io::Result<()> {
+    // Renaming over a symlink would replace the link, so write to its target.
+    let target = if fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+        fs::canonicalize(path)?
+    } else {
+        path.to_path_buf()
+    };
+    let mut tmp_name = target
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Pfad ohne Dateinamen"))?
+        .to_os_string();
+    tmp_name.push(".tmp");
+    let tmp = target.with_file_name(tmp_name);
+
+    let result = write_synced(&tmp, contents).and_then(|()| fs::rename(&tmp, &target));
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
+}
+
+fn write_synced(path: &Path, contents: &str) -> io::Result<()> {
+    let mut file = fs::File::create(path)?;
+    file.write_all(contents.as_bytes())?;
+    file.sync_all()
 }
 
 /// Sets or removes `skillOverrides[name]` and drops `skillOverrides` once it is empty.
@@ -570,5 +600,67 @@ mod tests {
     #[test]
     fn override_rejects_non_object_settings_root() {
         assert!(apply_skill_override(serde_json::json!([1, 2]), "foo", Some("off")).is_err());
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("skillswitch-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn file_names(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn write_atomic_creates_and_replaces_without_leaving_a_temp_file() {
+        let dir = temp_dir("write");
+        let path = dir.join("settings.json");
+        write_atomic(&path, "{\"a\":1}").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{\"a\":1}");
+        write_atomic(&path, "{\"b\":2}").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{\"b\":2}");
+        assert_eq!(file_names(&dir), ["settings.json"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_atomic_failure_keeps_the_target_and_removes_the_temp_file() {
+        let dir = temp_dir("write-fail");
+        // A directory can't be replaced by a file, so the rename fails.
+        let path = dir.join("settings.json");
+        fs::create_dir(&path).unwrap();
+        fs::write(path.join("keep.txt"), "x").unwrap();
+        assert!(write_atomic(&path, "{}").is_err());
+        assert_eq!(file_names(&dir), ["settings.json"]);
+        assert_eq!(fs::read_to_string(path.join("keep.txt")).unwrap(), "x");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_atomic_writes_through_a_symlink() {
+        let dir = temp_dir("write-link");
+        let real = dir.join("real.json");
+        let link = dir.join("settings.json");
+        fs::write(&real, "old").unwrap();
+        if std::os::windows::fs::symlink_file(&real, &link).is_err() {
+            // Creating symlinks needs admin rights or developer mode.
+            let _ = fs::remove_dir_all(&dir);
+            return;
+        }
+        write_atomic(&link, "new").unwrap();
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read_to_string(&real).unwrap(), "new");
+        let _ = fs::remove_dir_all(&dir);
     }
 }
