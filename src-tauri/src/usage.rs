@@ -347,12 +347,43 @@ fn classify(root: &Path, file: &Path) -> Option<FileMeta> {
     })
 }
 
-/// Project dir names encode the cwd with separators flattened to '-'; the part
-/// after the last "Documents-" is what a human recognizes.
+/// Claude Code names a project dir after its cwd with every character other than
+/// ASCII letters and digits replaced by '-', so `C:\Users\you\code\app` becomes
+/// `C--Users-you-code-app`. The label is that name without the flattened home dir
+/// in front (`code-app`), or the whole name for a project outside the home dir.
 pub(crate) fn project_label(dir: &str) -> String {
-    dir.rsplit_once("Documents-")
-        .map(|(_, r)| r.to_string())
-        .unwrap_or_else(|| dir.to_string())
+    let home = std::env::var("USERPROFILE").ok();
+    label_without_home(dir, home.as_deref())
+}
+
+fn label_without_home(dir: &str, home: Option<&str>) -> String {
+    let Some(home) = home else {
+        return dir.to_string();
+    };
+    let prefix = flatten_path(home.trim_end_matches(['\\', '/']));
+    // Windows paths are case-insensitive, so the cwd may be cased differently
+    // from USERPROFILE.
+    let starts_with_home = dir
+        .get(..prefix.len())
+        .is_some_and(|p| !prefix.is_empty() && p.eq_ignore_ascii_case(&prefix));
+    if !starts_with_home {
+        return dir.to_string();
+    }
+    match &dir[prefix.len()..] {
+        "" => "~".to_string(),
+        // The next character must be the separator, or "C--Users-you" would also
+        // strip the front of "C--Users-young-app".
+        rest => match rest.strip_prefix('-') {
+            Some(label) if !label.is_empty() => label.to_string(),
+            _ => dir.to_string(),
+        },
+    }
+}
+
+fn flatten_path(path: &str) -> String {
+    path.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -1211,11 +1242,33 @@ mod tests {
 
     #[test]
     fn project_label_strips_flattened_home_prefix() {
+        let home = Some("C:\\Users\\you");
         assert_eq!(
-            project_label("C--Users-you-Documents-Claude-Skill-switch"),
-            "Claude-Skill-switch"
+            label_without_home("C--Users-you-Documents-skill-switch", home),
+            "Documents-skill-switch"
         );
-        assert_eq!(project_label("something-else"), "something-else");
+        assert_eq!(label_without_home("C--Users-you", home), "~");
+        assert_eq!(label_without_home("c--users-YOU-app", home), "app");
+        assert_eq!(label_without_home("something-else", None), "something-else");
+    }
+
+    #[test]
+    fn project_label_works_outside_documents_and_only_on_segment_boundaries() {
+        let home = Some("C:\\Users\\jane.doe\\");
+        assert_eq!(
+            label_without_home("C--Users-jane-doe-code-data-pipeline", home),
+            "code-data-pipeline"
+        );
+        assert_eq!(
+            label_without_home("C--Users-jane-doe2-app", home),
+            "C--Users-jane-doe2-app",
+            "a longer user name must not match"
+        );
+        assert_eq!(
+            label_without_home("D--work-app", home),
+            "D--work-app",
+            "outside the home dir the name stays as it is"
+        );
     }
 
     #[test]
