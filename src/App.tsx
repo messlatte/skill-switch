@@ -57,13 +57,11 @@ const appWindow = "__TAURI_INTERNALS__" in window ? getCurrentWindow() : null
 
 const SIDEBAR_NOTE: Partial<Record<View, string>> = {
   skills:
-    'Alle drei Zustände wirken erst in der nächsten Claude-Code-Session. In laufenden Chats: die Kopier-Buttons nutzen.',
-  omniroute:
-    'Gilt nur für Terminal-Sessions in diesem Ordner. Die Desktop-App läuft immer über Anthropic.',
+    "Alle drei Zustände wirken erst in der nächsten Claude-Code-Session. In laufenden Chats: die Kopier-Buttons nutzen.",
+  omniroute: "Gilt nur für Terminal-Sessions in diesem Ordner. Die Desktop-App läuft immer über Anthropic.",
   usage:
-    'Prozent-Anteile sind eine Heuristik nach API-Preisverhältnis. Wie Anthropic Cache-Reads gegen das Abo-Limit gewichtet, ist lokal nicht sichtbar.',
-  live:
-    'Desktop-App und Terminal schreiben dieselben Transcripts — beide erscheinen hier. Ein Live-Prozentwert des 5h-Limits existiert lokal nicht.',
+    "Prozent-Anteile sind eine Heuristik nach API-Preisverhältnis. Wie Anthropic Cache-Reads gegen das Abo-Limit gewichtet, ist lokal nicht sichtbar.",
+  live: "Desktop-App und Terminal schreiben dieselben Transcripts — beide erscheinen hier. Ein Live-Prozentwert des 5h-Limits existiert lokal nicht.",
 }
 
 function App() {
@@ -483,18 +481,8 @@ function Sidebar({
   return (
     <aside className="flex w-52 shrink-0 flex-col justify-between border-r border-border p-3">
       <nav className="space-y-0.5">
-        <NavItem
-          icon={Puzzle}
-          label="Skills"
-          active={view === "skills"}
-          onClick={() => onChange("skills")}
-        />
-        <NavItem
-          icon={Plug}
-          label="Plugins & MCP"
-          active={view === "config"}
-          onClick={() => onChange("config")}
-        />
+        <NavItem icon={Puzzle} label="Skills" active={view === "skills"} onClick={() => onChange("skills")} />
+        <NavItem icon={Plug} label="Plugins & MCP" active={view === "config"} onClick={() => onChange("config")} />
         <NavItem
           icon={Route}
           label="OmniRoute"
@@ -509,12 +497,7 @@ function Sidebar({
           onClick={() => onChange("live")}
           badge={liveBadge}
         />
-        <NavItem
-          icon={Gauge}
-          label="Usage"
-          active={view === "usage"}
-          onClick={() => onChange("usage")}
-        />
+        <NavItem icon={Gauge} label="Usage" active={view === "usage"} onClick={() => onChange("usage")} />
       </nav>
 
       {note && (

@@ -3,11 +3,7 @@ import { ClipboardCopy, ClipboardX, ExternalLink, Link2, RefreshCw, Search } fro
 import { toast } from "sonner"
 import { openExternal, type AttributionUsage, type Profile, type Skill } from "@/lib/api"
 import { Input } from "@/components/ui/input"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { skillState, type SkillState } from "@/lib/skill-state"
 import { cn } from "@/lib/utils"
 
@@ -236,9 +232,7 @@ function ProfileRow({
   return (
     <div className="flex shrink-0 flex-col gap-1.5 rounded-[10px] border border-border bg-card px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="shrink-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Profile
-        </span>
+        <span className="shrink-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Profile</span>
 
         {profiles.length > 0 && (
           <>
@@ -344,9 +338,7 @@ function ProfileRow({
       </div>
 
       {profiles.length === 0 && !addOpen && (
-        <p className="text-xs text-muted-foreground">
-          Noch kein Profil — aktuellen Zustand als Profil speichern.
-        </p>
+        <p className="text-xs text-muted-foreground">Noch kein Profil — aktuellen Zustand als Profil speichern.</p>
       )}
 
       {current && <p className="text-xs text-muted-foreground">{profileSummary(current, skills)}</p>}
@@ -386,9 +378,7 @@ function SkillGroupSection({
               Ohne bekannte Quelle
             </span>
           )}
-          <span className="shrink-0 text-xs text-muted-foreground">
-            · {group.skills.length}
-          </span>
+          <span className="shrink-0 text-xs text-muted-foreground">· {group.skills.length}</span>
         </div>
         {group.skills.length > 1 && (
           <StateSegment
@@ -459,7 +449,9 @@ function SkillRow({
                   : "Keine Nutzung in den Transcripts"}
               </p>
             </TooltipTrigger>
-            <TooltipContent>Zählt Nachrichten, bei denen der Skill aktiv war — Korrelation, keine Kosten.</TooltipContent>
+            <TooltipContent>
+              Zählt Nachrichten, bei denen der Skill aktiv war — Korrelation, keine Kosten.
+            </TooltipContent>
           </Tooltip>
         )}
       </div>
@@ -468,10 +460,7 @@ function SkillRow({
         icon={ClipboardCopy}
         label="Aktivierungs-Prompt kopieren"
         disabled={!skill.skillMdPath}
-        onClick={() =>
-          skill.skillMdPath &&
-          copy(activationPrompt(skill), "Aktivierungs-Prompt kopiert.")
-        }
+        onClick={() => skill.skillMdPath && copy(activationPrompt(skill), "Aktivierungs-Prompt kopiert.")}
       />
       <IconAction
         icon={ClipboardX}
@@ -511,11 +500,7 @@ function StateSegment({
   label: string
 }) {
   return (
-    <div
-      role="group"
-      aria-label={label}
-      className="inline-flex shrink-0 rounded-full bg-muted p-0.5"
-    >
+    <div role="group" aria-label={label} className="inline-flex shrink-0 rounded-full bg-muted p-0.5">
       {STATE_OPTIONS.map((opt) => (
         <Tooltip key={opt.value}>
           <TooltipTrigger asChild>

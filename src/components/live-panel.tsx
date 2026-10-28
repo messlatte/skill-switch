@@ -16,7 +16,11 @@ const fmtK = (n: number) => (n >= 1_000_000 ? `${(n / 1e6).toFixed(2)} M` : `${M
 const fmtAgo = (s: number) =>
   s < 60 ? `vor ${s} s` : s < 3600 ? `vor ${Math.round(s / 60)} min` : `vor ${Math.round(s / 3600)} h`
 const fmtAge = (s: number) =>
-  s >= 2 * 86_400 ? `${Math.round(s / 86_400)} Tage` : s >= 3600 ? `${Math.round(s / 3600)} h` : `${Math.max(1, Math.round(s / 60))} min`
+  s >= 2 * 86_400
+    ? `${Math.round(s / 86_400)} Tage`
+    : s >= 3600
+      ? `${Math.round(s / 3600)} h`
+      : `${Math.max(1, Math.round(s / 60))} min`
 
 const LEVEL_TEXT: Record<Advice["level"], string> = {
   high: "text-destructive",
@@ -58,8 +62,8 @@ export function LivePanel({
             {sessions ? `${activeCount} aktiv · ${sessions.length} in den letzten 6 h` : "Sessions"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Liest nur das Ende der Transcripts alle 5 s. Ausführen kann eine Empfehlung nur Claude Code
-            selbst — Befehl kopieren und in den Chat einfügen.
+            Liest nur das Ende der Transcripts alle 5 s. Ausführen kann eine Empfehlung nur Claude Code selbst — Befehl
+            kopieren und in den Chat einfügen.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -98,7 +102,10 @@ function ContextHookCard() {
   const [status, setStatus] = useState<HookStatus | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const refresh = () => contextHookStatus().then(setStatus).catch((e) => toast.error(String(e)))
+  const refresh = () =>
+    contextHookStatus()
+      .then(setStatus)
+      .catch((e) => toast.error(String(e)))
   useEffect(() => {
     refresh()
   }, [])
@@ -128,19 +135,14 @@ function ContextHookCard() {
         Hinweis direkt im Chat
       </h2>
       <p className="text-xs text-muted-foreground">
-        Zeigt in jeder Claude-Code-Session — Desktop und Terminal — vor deinem Prompt
-        eine Zeile, sobald der Kontext 850k überschreitet. Blockiert nichts, landet
-        nicht im Modell-Kontext.
+        Zeigt in jeder Claude-Code-Session — Desktop und Terminal — vor deinem Prompt eine Zeile, sobald der Kontext
+        850k überschreitet. Blockiert nichts, landet nicht im Modell-Kontext.
       </p>
 
       {status && (
         <>
-          <p className="mt-2.5 text-xs font-medium">
-            {status.installed ? "installiert" : "nicht installiert"}
-          </p>
-          <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
-            {status.settingsPath}
-          </p>
+          <p className="mt-2.5 text-xs font-medium">{status.installed ? "installiert" : "nicht installiert"}</p>
+          <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{status.settingsPath}</p>
           <p className="break-all font-mono text-[11px] text-muted-foreground">{status.scriptPath}</p>
 
           <button
@@ -227,12 +229,30 @@ function SessionCard({ s }: { s: LiveSession }) {
       </div>
 
       <div className="grid grid-cols-3 gap-x-4 gap-y-2 px-4 py-3 md:grid-cols-6">
-        <Stat label="Kontext" value={fmtK(s.context)} className={LEVEL_TEXT[ctxLevel]} hint="Was der letzte Request gelesen hat: Input + Cache-Read + Cache-Write." />
+        <Stat
+          label="Kontext"
+          value={fmtK(s.context)}
+          className={LEVEL_TEXT[ctxLevel]}
+          hint="Was der letzte Request gelesen hat: Input + Cache-Read + Cache-Write."
+        />
         <Stat label="Turns" value={String(s.turns)} hint="User-Nachrichten in dieser Session." />
-        <Stat label="Requests" value={`${s.turnRequests} / ${s.requests}`} hint="Aktueller Turn / gesamt. Jeder Request liest den ganzen Kontext." />
-        <Stat label="Fehler im Turn" value={String(s.turnErrors)} className={s.turnErrors >= 3 ? "text-warning" : undefined} hint="Fehlgeschlagene Tool-Aufrufe seit deiner letzten Nachricht." />
+        <Stat
+          label="Requests"
+          value={`${s.turnRequests} / ${s.requests}`}
+          hint="Aktueller Turn / gesamt. Jeder Request liest den ganzen Kontext."
+        />
+        <Stat
+          label="Fehler im Turn"
+          value={String(s.turnErrors)}
+          className={s.turnErrors >= 3 ? "text-warning" : undefined}
+          hint="Fehlgeschlagene Tool-Aufrufe seit deiner letzten Nachricht."
+        />
         <Stat label="Alter" value={fmtAge(s.ageSecs)} hint="Erste bis letzte Nachricht dieser Session." />
-        <Stat label="Compacts · Agents" value={`${s.compactions} · ${s.agentsActive}`} hint="Bisherige Kompaktierungen · Subagents, die in den letzten 10 min geschrieben haben." />
+        <Stat
+          label="Compacts · Agents"
+          value={`${s.compactions} · ${s.agentsActive}`}
+          hint="Bisherige Kompaktierungen · Subagents, die in den letzten 10 min geschrieben haben."
+        />
       </div>
 
       <div className="space-y-1 border-t border-border px-3 pb-3 pt-2">
@@ -251,7 +271,11 @@ function AdviceRow({ a }: { a: Advice }) {
     try {
       await navigator.clipboard.writeText(a.command)
       setCopied(true)
-      toast.success(a.command.endsWith(" ") ? "Kopiert — Thema ergänzen und in den Chat einfügen." : "Kopiert — in den Chat einfügen.")
+      toast.success(
+        a.command.endsWith(" ")
+          ? "Kopiert — Thema ergänzen und in den Chat einfügen."
+          : "Kopiert — in den Chat einfügen."
+      )
       setTimeout(() => setCopied(false), 1500)
     } catch (e) {
       toast.error(String(e))
@@ -300,6 +324,8 @@ function Stat({ label, value, hint, className }: { label: string; value: string;
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{children}</span>
+    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+      {children}
+    </span>
   )
 }

@@ -1,15 +1,5 @@
 import { useEffect, useState } from "react"
-import {
-  AlertTriangle,
-  Folder,
-  Info,
-  Play,
-  Plug,
-  RefreshCw,
-  Square,
-  Terminal,
-  Trash2,
-} from "lucide-react"
+import { AlertTriangle, Folder, Info, Play, Plug, RefreshCw, Square, Terminal, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import {
   addGitignoreEntry,
@@ -27,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 
 const WARNING_TEXT =
-  'In markierten Projekten geht mein Quellcode an fremde Anbieter. Nicht für Kunden- oder Privatprojekte.'
+  "In markierten Projekten geht mein Quellcode an fremde Anbieter. Nicht für Kunden- oder Privatprojekte."
 
 type OmniroutePanelProps = {
   omni: OmniState | null
@@ -100,8 +90,7 @@ function GlobalLeakBanner({ warn }: { warn: GlobalRouteWarning }) {
     <div className="rounded-[10px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-xs text-destructive">
       <p className="flex items-center gap-2 font-medium">
         <AlertTriangle className="size-3.5 shrink-0" />
-        ANTHROPIC_BASE_URL ist global gesetzt — das betrifft ALLE Projekte, nicht nur
-        markierte.
+        ANTHROPIC_BASE_URL ist global gesetzt — das betrifft ALLE Projekte, nicht nur markierte.
       </p>
       <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
         {hits.map((h) => (
@@ -180,12 +169,7 @@ function ServiceCard({ baseUrl }: { baseUrl: string }) {
               running ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
             )}
           >
-            <span
-              className={cn(
-                "size-1.5 rounded-full",
-                running ? "bg-primary" : "bg-muted-foreground/50"
-              )}
-            />
+            <span className={cn("size-1.5 rounded-full", running ? "bg-primary" : "bg-muted-foreground/50")} />
             {running === null ? "prüfe…" : running ? "läuft" : "läuft nicht"}
           </span>
           <span className="text-xs text-muted-foreground">{baseUrl}</span>
@@ -222,15 +206,15 @@ function ServiceCard({ baseUrl }: { baseUrl: string }) {
               </button>
             </TooltipTrigger>
             <TooltipContent>
-              Schickt eine winzige echte Anfrage über die aktuelle URL + Key und zeigt,
-              welches Modell gerade antwortet.
+              Schickt eine winzige echte Anfrage über die aktuelle URL + Key und zeigt, welches Modell gerade antwortet.
             </TooltipContent>
           </Tooltip>
         </div>
       </div>
       {lastTest && (
         <p className="text-[11px] text-muted-foreground">
-          Letzter Test: OmniRoute antwortete mit <span className="font-medium text-foreground">{lastTest.model}</span> ({lastTest.latencyMs} ms)
+          Letzter Test: OmniRoute antwortete mit <span className="font-medium text-foreground">{lastTest.model}</span> (
+          {lastTest.latencyMs} ms)
         </p>
       )}
     </section>
@@ -265,9 +249,7 @@ function SettingsCard({
 
   return (
     <section className="rounded-[10px] border border-border bg-card p-4">
-      <h2 className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        Einstellungen
-      </h2>
+      <h2 className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Einstellungen</h2>
       <div className="space-y-2.5">
         <label className="block">
           <span className="mb-1 block text-xs text-muted-foreground">
@@ -325,9 +307,7 @@ function ProjectsSection({
   return (
     <section>
       <div className="mb-2 flex items-center justify-between px-1">
-        <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Projekte
-        </h2>
+        <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Projekte</h2>
         <button
           type="button"
           onClick={onRefresh}
@@ -340,9 +320,7 @@ function ProjectsSection({
 
       <div className="overflow-hidden rounded-[10px] border border-border bg-card">
         {omni.projects.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-muted-foreground">
-            Noch kein Projekt hinzugefügt.
-          </p>
+          <p className="px-4 py-3 text-sm text-muted-foreground">Noch kein Projekt hinzugefügt.</p>
         ) : (
           omni.projects.map((p, i) => (
             <div key={p.path}>
@@ -412,19 +390,14 @@ function ProjectRowView({
 
   return (
     <div
-      className={cn(
-        "flex flex-col gap-1.5 px-4 py-2.5",
-        project.active && "border-l-2 border-l-warning bg-warning/5"
-      )}
+      className={cn("flex flex-col gap-1.5 px-4 py-2.5", project.active && "border-l-2 border-l-warning bg-warning/5")}
     >
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium" title={project.path}>
             {project.path}
           </p>
-          {!project.exists && (
-            <p className="text-xs text-destructive">Ordner nicht gefunden.</p>
-          )}
+          {!project.exists && <p className="text-xs text-destructive">Ordner nicht gefunden.</p>}
           {project.error && <p className="text-xs text-destructive">{project.error}</p>}
         </div>
 
@@ -439,9 +412,7 @@ function ProjectRowView({
               <Terminal className="size-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>
-            OmniRoute-Terminal öffnen (einmalig, schreibt nichts auf die Platte)
-          </TooltipContent>
+          <TooltipContent>OmniRoute-Terminal öffnen (einmalig, schreibt nichts auf die Platte)</TooltipContent>
         </Tooltip>
 
         {confirmRemove ? (
@@ -511,8 +482,7 @@ function ProjectRowView({
         <div className="flex items-center gap-2 rounded-md bg-warning/10 px-2 py-1 text-[11px] text-warning">
           <AlertTriangle className="size-3 shrink-0" />
           <span className="flex-1">
-            settings.local.json ist nicht in der .gitignore erfasst — der Key liegt im
-            Klartext im Repo.
+            settings.local.json ist nicht in der .gitignore erfasst — der Key liegt im Klartext im Repo.
           </span>
           <button
             type="button"
@@ -528,19 +498,16 @@ function ProjectRowView({
       {project.active && (
         <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-1.5">
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground">
-              Modellauswahl vom Gateway laden
-            </span>
+            <span className="text-[11px] text-muted-foreground">Modellauswahl vom Gateway laden</span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Info className="size-3 shrink-0 text-muted-foreground/50" />
               </TooltipTrigger>
               <TooltipContent className="max-w-56">
-                Claude Code fragt OmniRoute beim Start nach allen verfügbaren Modellen und
-                zeigt sie im <code>/model</code>-Picker. Achtung: Nicht jedes Modell
-                unterstützt Claude Codes Tool-Aufrufe (Datei-Bearbeitung, Bash) korrekt —
-                bei Fehlern wie „No such tool available" zurück zu einem Claude-Modell
-                wechseln.
+                Claude Code fragt OmniRoute beim Start nach allen verfügbaren Modellen und zeigt sie im{" "}
+                <code>/model</code>-Picker. Achtung: Nicht jedes Modell unterstützt Claude Codes Tool-Aufrufe
+                (Datei-Bearbeitung, Bash) korrekt — bei Fehlern wie „No such tool available" zurück zu einem
+                Claude-Modell wechseln.
               </TooltipContent>
             </Tooltip>
           </div>

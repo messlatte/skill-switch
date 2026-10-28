@@ -7,9 +7,9 @@ Windows desktop app for turning Claude Code skills on and off without moving fol
 ## Features
 
 - **Skills:** lists the skills in `~/.claude/skills` and `~/.claude/skills-disabled` with name and description from `SKILL.md`. Each skill has three states:
-  - *Aktiv*: Claude sees the skill and can use it on its own.
-  - *Manuell*: only callable via `/name`. The app sets `skillOverrides` in `~/.claude/settings.json` and leaves the rest of the file as it is.
-  - *Aus*: moves the folder to `skills-disabled`. Nothing is deleted, and the move stops if a folder with the same name is already there.
+  - _Aktiv_: Claude sees the skill and can use it on its own.
+  - _Manuell_: only callable via `/name`. The app sets `skillOverrides` in `~/.claude/settings.json` and leaves the rest of the file as it is.
+  - _Aus_: moves the folder to `skills-disabled`. Nothing is deleted, and the move stops if a folder with the same name is already there.
 - **Groups:** if `~/.agents/.skill-lock.json` exists, skills are grouped by the repo they were installed from, with a link to the repo and one switch for the whole group.
 - **Profiles:** save the current skill states under a name and apply them again later.
 - **Usage:** reads the local transcripts in `~/.claude/projects` and shows where the usage limit goes (context size, long sessions, effort, limit hits). Only metadata is read, not the prompts.
