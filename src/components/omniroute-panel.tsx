@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 
 const WARNING_TEXT =
-  "In markierten Projekten geht mein Quellcode an fremde Anbieter. Nicht für Kunden- oder Privatprojekte."
+  "In Projekten, die über OmniRoute laufen, geht der Quellcode an fremde Anbieter. Für Kundenprojekte und vertraulichen Code ist das nicht geeignet."
 
 type OmniroutePanelProps = {
   omni: OmniState | null
