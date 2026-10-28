@@ -8,15 +8,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { skillState, type SkillState } from "@/lib/skill-state"
 import { cn } from "@/lib/utils"
-
-export type SkillState = "active" | "manual" | "disabled"
-
-export function skillState(skill: Skill): SkillState {
-  if (!skill.enabled) return "disabled"
-  if (skill.manualOnly) return "manual"
-  return "active"
-}
 
 type SourceGroup = {
   key: string

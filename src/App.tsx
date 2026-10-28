@@ -30,7 +30,8 @@ import {
   type UsageReport,
 } from "@/lib/api"
 import { notificationsFor, type Memo } from "@/lib/notify"
-import { skillState, SkillList, type SkillState } from "@/components/skill-list"
+import { SkillList } from "@/components/skill-list"
+import { skillState, type SkillState } from "@/lib/skill-state"
 import { ConfigPanel } from "@/components/config-panel"
 import { OmniroutePanel } from "@/components/omniroute-panel"
 import { UsagePanel } from "@/components/usage-panel"
@@ -96,10 +97,10 @@ function App() {
       .finally(() => setUsageLoading(false))
   }
 
-  useEffect(() => {
-    if (view === "usage" && !usage && !usageLoading && !usageError) refreshUsage()
-    // oxlint-disable-next-line react/exhaustive-deps
-  }, [view])
+  function showView(next: View) {
+    setView(next)
+    if (next === "usage" && !usage && !usageLoading && !usageError) refreshUsage()
+  }
 
   // Polls even when the Live tab is closed, so notifications still fire.
   useEffect(() => {
@@ -358,7 +359,7 @@ function App() {
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         <TitleBar />
         <div className="flex min-h-0 flex-1">
-          <Sidebar view={view} onChange={setView} omniBadge={activeRouteCount} liveBadge={liveActiveCount} />
+          <Sidebar view={view} onChange={showView} omniBadge={activeRouteCount} liveBadge={liveActiveCount} />
           <main className="min-w-0 flex-1 overflow-hidden">
             {view === "skills" ? (
               <SkillList

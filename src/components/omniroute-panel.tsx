@@ -64,7 +64,8 @@ export function OmniroutePanel({
       ) : (
         <>
           <ServiceCard baseUrl={omni.baseUrl} />
-          <SettingsCard baseUrl={omni.baseUrl} apiKeySet={omni.apiKeySet} onSave={onSaveConfig} />
+          {/* Keyed so the form starts over with the saved URL whenever it changes. */}
+          <SettingsCard key={omni.baseUrl} baseUrl={omni.baseUrl} apiKeySet={omni.apiKeySet} onSave={onSaveConfig} />
           <ProjectsSection
             omni={omni}
             pending={pending}
@@ -248,8 +249,6 @@ function SettingsCard({
   const [urlInput, setUrlInput] = useState(baseUrl)
   const [keyInput, setKeyInput] = useState("")
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => setUrlInput(baseUrl), [baseUrl])
 
   async function handleSave() {
     setSaving(true)
