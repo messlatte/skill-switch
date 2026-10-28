@@ -268,17 +268,30 @@ pub(crate) fn rotate_backup(
     if let Err(e) = fs::write(&file, content) {
         return Some(format!("Backup konnte nicht geschrieben werden: {e}"));
     }
-    let Ok(read_dir) = fs::read_dir(&dir) else {
-        return None;
-    };
-    let mut entries: Vec<PathBuf> = read_dir.flatten().map(|e| e.path()).collect();
-    entries.sort(); // timestamp-prefixed names sort chronologically
-    if entries.len() > MAX_BACKUPS {
-        for old in &entries[..entries.len() - MAX_BACKUPS] {
-            let _ = fs::remove_file(old);
-        }
-    }
+    prune_backups(&dir, file_label, MAX_BACKUPS);
     None
+}
+
+/// Deletes all but the newest `keep` backups named `{file_label}.{ts}.bak` in `dir`.
+/// Sorts by the parsed timestamp: by name, "x.999.bak" would come after "x.1000.bak".
+fn prune_backups(dir: &Path, file_label: &str, keep: usize) {
+    let Ok(read_dir) = fs::read_dir(dir) else {
+        return;
+    };
+    let prefix = format!("{file_label}.");
+    let mut backups: Vec<(u64, PathBuf)> = read_dir
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().into_string().ok()?;
+            let ts = name.strip_prefix(&prefix)?.strip_suffix(".bak")?;
+            Some((ts.parse().ok()?, e.path()))
+        })
+        .collect();
+    backups.sort();
+    let excess = backups.len().saturating_sub(keep);
+    for (_, old) in &backups[..excess] {
+        let _ = fs::remove_file(old);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1053,6 +1066,42 @@ mod tests {
             "/messages"
         );
         assert!(messages_path("not a url").is_err());
+    }
+
+    #[test]
+    fn prune_backups_keeps_the_newest_by_timestamp_and_ignores_other_files() {
+        let dir = std::env::temp_dir().join(format!("skillswitch-prune-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        for name in [
+            "s.json.999.bak",
+            "s.json.1000.bak",
+            "s.json.1001.bak",
+            "s.json.1002.bak",
+            "t.json.5.bak",
+            "notes.txt",
+        ] {
+            fs::write(dir.join(name), "x").unwrap();
+        }
+        prune_backups(&dir, "s.json", 3);
+        let mut left: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().into_string().unwrap())
+            .collect();
+        left.sort();
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(
+            left,
+            [
+                "notes.txt",
+                "s.json.1000.bak",
+                "s.json.1001.bak",
+                "s.json.1002.bak",
+                "t.json.5.bak"
+            ],
+            "999 is the oldest even though it sorts last by name"
+        );
     }
 
     #[test]
