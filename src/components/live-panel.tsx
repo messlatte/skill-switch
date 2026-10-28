@@ -101,7 +101,6 @@ function ContextHookCard() {
   const refresh = () => contextHookStatus().then(setStatus).catch((e) => toast.error(String(e)))
   useEffect(() => {
     refresh()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleToggle() {
