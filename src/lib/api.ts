@@ -101,7 +101,7 @@ export type SessionRow = {
 }
 
 export type Finding = {
-  severity: "high" | "medium" | "low" | "info"
+  severity: "high" | "medium" | "info"
   title: string
   evidence: string
   recommendation: string

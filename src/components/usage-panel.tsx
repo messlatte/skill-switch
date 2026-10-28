@@ -76,13 +76,11 @@ export function UsagePanel({ report, loading, error, onRefresh }: UsagePanelProp
 const SEVERITY_STYLE: Record<Finding["severity"], string> = {
   high: "border-destructive/40 bg-destructive/10 text-destructive",
   medium: "border-warning/40 bg-warning/10 text-warning",
-  low: "border-border bg-card text-foreground",
   info: "border-border bg-card text-muted-foreground",
 }
 const SEVERITY_LABEL: Record<Finding["severity"], string> = {
   high: "Hoch",
   medium: "Mittel",
-  low: "Niedrig",
   info: "Info",
 }
 
