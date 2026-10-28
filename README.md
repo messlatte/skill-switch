@@ -1,5 +1,7 @@
 # Skill Switch
 
+[![CI](https://github.com/messlatte/skill-switch/actions/workflows/ci.yml/badge.svg)](https://github.com/messlatte/skill-switch/actions/workflows/ci.yml)
+
 Windows desktop app for turning Claude Code skills on and off without moving folders by hand. Built with Tauri 2, React and Rust. The UI is in German.
 
 ## Features
