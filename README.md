@@ -35,10 +35,7 @@ npm run tauri dev
 
 ## Build
 
-The repo contains no app icons. Generate them from a 1024×1024 PNG first:
-
 ```bash
-npx tauri icon path/to/icon.png
 npm run tauri build
 ```
 

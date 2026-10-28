@@ -27,10 +27,6 @@ dist-ssr
 .claude/
 CLAUDE.md
 
-# App icons are binary and generated per-machine; regenerate with
-# `npx tauri icon path/to/1024x1024.png` before building an installer.
-src-tauri/icons/
-
 # Rust (src-tauri/.gitignore also covers this within that subtree)
 /src-tauri/target/
 /src-tauri/gen/schemas
