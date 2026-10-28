@@ -475,7 +475,7 @@ fn collect(
     }
     // Drop cursors of files that fell out of the window so the map can't grow forever.
     cursors.retain(|p, _| mtime_secs(p).is_some_and(|m| now - m <= SHOW_SECS));
-    out.sort_by(|a, b| a.seconds_since_activity.cmp(&b.seconds_since_activity));
+    out.sort_by_key(|a| a.seconds_since_activity);
     Ok(out)
 }
 

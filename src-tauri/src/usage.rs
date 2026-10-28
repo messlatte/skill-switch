@@ -767,7 +767,7 @@ impl Aggregator {
                     count: *c,
                 })
                 .collect();
-            v.sort_by(|a, b| b.count.cmp(&a.count));
+            v.sort_by_key(|a| std::cmp::Reverse(a.count));
             v.truncate(TOP_TOOLS);
             v
         };
@@ -821,7 +821,7 @@ impl Aggregator {
             all.merge(&s.agents);
             let w = all.weighted();
             let mut models: Vec<(String, u64)> = s.models.into_iter().collect();
-            models.sort_by(|a, b| b.1.cmp(&a.1));
+            models.sort_by_key(|a| std::cmp::Reverse(a.1));
             let models = models
                 .iter()
                 .map(|(m, n)| format!("{}:{n}", m.trim_start_matches("claude-")))
@@ -879,7 +879,7 @@ impl Aggregator {
                     last_day: a.last_day,
                 })
                 .collect();
-            v.sort_by(|a, b| b.messages.cmp(&a.messages));
+            v.sort_by_key(|a| std::cmp::Reverse(a.messages));
             v
         };
         let skill_usage = attrib_vec(self.skill_usage);

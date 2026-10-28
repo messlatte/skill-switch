@@ -222,7 +222,7 @@ fn list_skills() -> Result<Vec<Skill>, String> {
 
     let mut skills = read_skills_in(&base.join("skills"), true, &overrides, &sources);
     skills.extend(read_skills_in(&disabled_dir, false, &overrides, &sources));
-    skills.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    skills.sort_by_key(|a| a.name.to_lowercase());
     Ok(skills)
 }
 
@@ -428,7 +428,7 @@ fn read_env() -> Result<EnvInfo, String> {
             }
         }
     }
-    plugins.sort_by(|a, b| a.id.to_lowercase().cmp(&b.id.to_lowercase()));
+    plugins.sort_by_key(|a| a.id.to_lowercase());
 
     Ok(EnvInfo {
         mcp_servers,
