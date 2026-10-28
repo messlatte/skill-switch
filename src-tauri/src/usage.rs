@@ -834,7 +834,7 @@ impl Aggregator {
                     project: s.project,
                     start_day: s
                         .first
-                        .map(|f| day_from_epoch(f))
+                        .map(day_from_epoch)
                         .unwrap_or_else(|| "?".to_string()),
                     duration_min: (secs / 60) as u64,
                     turns: s.turns,
