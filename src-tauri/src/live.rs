@@ -18,6 +18,9 @@ use crate::usage::{parse_ts, project_label};
 // Rules
 const ACTIVE_SECS: i64 = 10 * 60; // written within 10 min = active
 const SHOW_SECS: i64 = 6 * 60 * 60; // listed (as idle) up to 6 h
+/// Cost advice: every request re-reads the whole context, so compacting pays off long
+/// before the window is full. hooks/context-hook.ps1 has another job: a last notice in
+/// the chat before auto-compact, so it starts at 850k.
 const CTX_COMPACT_NOW: u64 = 400_000;
 const CTX_COMPACT_SOON: u64 = 200_000;
 const RULE_TURN_REQUESTS: u64 = 15;
