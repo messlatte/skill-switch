@@ -894,11 +894,7 @@ impl Aggregator {
             by_kind: by_kind_v,
             by_model: named(by_model),
             by_effort: by_effort_v,
-            avg_context: if total.requests > 0 {
-                total.context() / total.requests
-            } else {
-                0
-            },
+            avg_context: total.context().checked_div(total.requests).unwrap_or(0),
             cache_read_pct: pct(total.cache_read as f64, total_ctx as f64),
             large_context_volume_pct: context_buckets[4].volume_pct,
             context_buckets,
@@ -972,11 +968,11 @@ pub(crate) fn trend(days: &HashMap<String, DayStats>, today: &str) -> (Trend, Ve
             let ds = days.get(&day).copied().unwrap_or_default();
             DayRow {
                 requests: ds.tokens.requests,
-                avg_context: if ds.tokens.requests > 0 {
-                    ds.tokens.context() / ds.tokens.requests
-                } else {
-                    0
-                },
+                avg_context: ds
+                    .tokens
+                    .context()
+                    .checked_div(ds.tokens.requests)
+                    .unwrap_or(0),
                 turns: ds.turns,
                 weighted: ds.tokens.weighted(),
                 day,
@@ -1011,11 +1007,7 @@ pub(crate) fn trend(days: &HashMap<String, DayStats>, today: &str) -> (Trend, Ve
         PeriodStats {
             days_active,
             requests: tokens.requests,
-            avg_context: if tokens.requests > 0 {
-                tokens.context() / tokens.requests
-            } else {
-                0
-            },
+            avg_context: tokens.context().checked_div(tokens.requests).unwrap_or(0),
             requests_per_turn: if turns > 0 {
                 (tokens.requests as f64 / turns as f64 * 10.0).round() / 10.0
             } else {
