@@ -286,9 +286,12 @@ pub(crate) fn rotate_backup(
 // ---------------------------------------------------------------------------
 
 fn check_gitignore(project: &Path) -> bool {
-    let Ok(content) = fs::read_to_string(project.join(".gitignore")) else {
-        return false;
-    };
+    fs::read_to_string(project.join(".gitignore")).is_ok_and(|c| gitignore_covers(&c))
+}
+
+/// True if a line of the .gitignore content ignores `.claude/settings.local.json`.
+/// Only these exact lines are recognized, no general glob matching.
+fn gitignore_covers(content: &str) -> bool {
     content.lines().map(str::trim).any(|l| {
         matches!(
             l,
@@ -1053,20 +1056,21 @@ mod tests {
     }
 
     #[test]
-    fn gitignore_check_recognizes_common_patterns() {
-        // Same matching as check_gitignore, inlined so no real file is needed.
-        let matches = |line: &str| {
-            matches!(
-                line.trim(),
-                ".claude/settings.local.json"
-                    | "settings.local.json"
-                    | "*.local.json"
-                    | ".claude/"
-                    | ".claude"
-            )
-        };
-        assert!(matches(".claude/settings.local.json"));
-        assert!(matches("*.local.json"));
-        assert!(!matches("node_modules/"));
+    fn gitignore_covers_recognizes_common_patterns() {
+        assert!(gitignore_covers(".claude/settings.local.json"));
+        assert!(gitignore_covers("node_modules/\n*.local.json\n"));
+        assert!(gitignore_covers("dist\r\n  .claude/  \r\n"));
+        assert!(gitignore_covers(".claude"));
+        assert!(gitignore_covers("settings.local.json"));
+    }
+
+    #[test]
+    fn gitignore_covers_rejects_unrelated_commented_and_negated_lines() {
+        assert!(!gitignore_covers(""));
+        assert!(!gitignore_covers("node_modules/\ndist\n"));
+        assert!(!gitignore_covers("# .claude/settings.local.json"));
+        assert!(!gitignore_covers("!.claude/settings.local.json"));
+        assert!(!gitignore_covers(".claude/settings.json"));
+        assert!(!gitignore_covers("settings.local.json.bak"));
     }
 }
